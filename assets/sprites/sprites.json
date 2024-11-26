@@ -1,0 +1,13 @@
+{
+    "SPRITE_ID": {
+        "id": "SPRITE_ID",
+        "directory": "assets/sprites",
+        "source": "SPRITE_FILE",
+        "bounds": {"x":0,"y":0,"w":0,"h":0},
+        "frameTime": 1,
+        "allowFlip": false,
+        "frames": {
+            "EXAMPLE_FRAME": {"x":0,"y":0,"w":0,"h":0,"offset":{"x":0,"y":0}}
+        }
+    }
+}

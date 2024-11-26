@@ -1,0 +1,28 @@
+{
+    "FPS_COUNTER": {
+        "TEXT_FPS": {
+            "id": "TEXT_FPS",
+            "type": "TEXT",
+            "anchor": "BOTTOM_LEFT",
+            "position": { "x": 0, "y": 25 },
+            "text": "FPS",
+            "font": "50px Arial",
+            "color": [238, 238, 238, 1],
+            "align": "left",
+            "opacity": 1
+        }
+    },
+    "EXAMPLE_UI": {
+        "TEXT_EXAMPLE": {
+            "id": "TEXT_EXAMPLE",
+            "type": "TEXT",
+            "anchor": "CENTER",
+            "position": { "x": 0, "y": 0 },
+            "text": "EXAMPLE_TEXT",
+            "font": "50px Arial",
+            "color": [238, 238, 238, 1],
+            "align": "center",
+            "opacity": 1
+        }
+    }
+}

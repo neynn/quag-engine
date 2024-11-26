@@ -1,0 +1,25 @@
+{
+    "EXAMPLE_SET": {
+        "id": "EXAMPLE_SET",
+        "directory": "assets/tiles",
+        "source": "SHEET_FILE",
+        "bounds": {"x":0,"y":0,"w":0,"h":0},
+        "frameTime": 1,
+        "allowFlip": false,
+        "frames": {
+            "EXAMPLE_FRAME": {"x":0,"y":0,"w":0,"h":0,"offset":{"x":0,"y":0}}
+        },
+        "animations": {
+            "EXAMPLE_ANIMATION": {
+                "id": "EXAMPLE_ANIMATION",
+                "frameTime": 1,
+                "frames": ["EXAMPLE_FRAME", "EXAMPLE_PATTERN"]
+            }
+        },
+        "patterns": {
+            "EXAMPLE_PATTERN": [
+                {"id": "EXAMPLE_FRAME", "shiftX": 0, "shiftY": 0}
+            ]
+        }
+    }
+}

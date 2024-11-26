@@ -1,0 +1,10 @@
+{
+    "socket": {
+        "server": "SERVER-ADDRESS",
+        "version": "https://cdn.socket.io/4.7.5/socket.io.min.js",
+        "userID": "EXAMPLE_USER_ID",
+        "reconnectionAttempts": 5,
+        "reconnectionDelay": 1000,
+        "timeout": 10000
+    }
+}
