@@ -1,4 +1,3 @@
-import { ResourceLoader } from "./source/resourceLoader.js";
 import { ImageSheet } from "./source/graphics/imageSheet.js";
 import { GlobalResourceManager } from "./source/resourceManager.js";
 import { ExampleContext } from "./exampleContext.js";
@@ -11,13 +10,13 @@ GlobalResourceManager.loadMain("assets", "files.json").then(async files => {
     const sprites = {};
     const tiles = {};
 
-    await ResourceLoader.loadImages(files.sprites, ((key, image, config) => {
+    await GlobalResourceManager.loadImages(files.sprites, ((key, image, config) => {
         const imageSheet = new ImageSheet(image, config);
         imageSheet.defineDefaultAnimation();
         sprites[key] = imageSheet;
     }));
 
-    await ResourceLoader.loadImages(files.tiles, ((key, image, config) => {
+    await GlobalResourceManager.loadImages(files.tiles, ((key, image, config) => {
         const imageSheet = new ImageSheet(image, config);
         imageSheet.defineAnimations();
         imageSheet.defineDefaultAnimation();
