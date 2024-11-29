@@ -1,4 +1,4 @@
-import { GameContext } from "./source/gameContext.js";
+import { GameContext } from "../source/gameContext.js";
 
 export const ExampleContext = function() {
     GameContext.call(this, 60);
@@ -9,11 +9,11 @@ ExampleContext.prototype.constructor = ExampleContext;
 
 ExampleContext.prototype.initialize = function() {
     this.uiManager.parseUI("FPS_COUNTER", this);
-    this.uiManager.addTextRequest("FPS_COUNTER", "TEXT_FPS", () => {
-        const value = Math.floor(this.renderer.fpsCounter.getSmoothFPS());
-        const text = `FPS: ${value}`;
+    this.uiManager.addDynamicText("FPS_COUNTER", "TEXT_FPS", (element) => {
+        const fps = Math.floor(this.renderer.fpsCounter.getSmoothFPS());
+        const text = `FPS: ${fps}`;
 
-        return text;
+        element.setText(text);
     });
 
     this.uiManager.parseUI("EXAMPLE_UI", this);

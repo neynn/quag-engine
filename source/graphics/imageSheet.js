@@ -1,7 +1,7 @@
 import { Animation } from "./animation.js";
 
-export const ImageSheet = function(image, config) {
-    this.id = null;
+export const ImageSheet = function(id) {
+    this.id = id;
     this.directory = null;
     this.source = null;
     this.frames = {};
@@ -11,47 +11,12 @@ export const ImageSheet = function(image, config) {
     this.frameTime = 1;
     this.allowFlip = false;
     this.loadedAnimations = new Map();
-    this.image = image;
-    this.buffer = null;
-    
-    this.loadFromConfig(config);
 }
 
 ImageSheet.DEFAULT_ANIMATION_ID = "default";
 
 ImageSheet.prototype.getBounds = function() {
     return this.bounds;
-}
-
-ImageSheet.prototype.getImage = function() {
-    if(this.buffer) {
-        return this.buffer;
-    }
-
-    return this.image;
-}
-
-ImageSheet.prototype.toBuffer = function() {
-    if(this.buffer) {
-        return;
-    }
-
-    const canvas = document.createElement("canvas");
-
-    canvas.width = this.image.width;
-    canvas.height = this.image.height;
-
-    const context = canvas.getContext("2d");
-    
-    context.imageSmoothingEnabled = false;
-
-    context.drawImage(
-        this.image,
-        0, 0, canvas.width, canvas.height,
-        0, 0, canvas.width, canvas.height
-    );
-
-    this.buffer = canvas;
 }
 
 ImageSheet.prototype.hasAnimation = function(animationID) {
@@ -66,7 +31,7 @@ ImageSheet.prototype.getAnimations = function() {
     return this.loadedAnimations;
 }
 
-ImageSheet.prototype.loadFromConfig = function(config) {
+ImageSheet.prototype.load = function(config) {
     const { id, directory, source, bounds, frameTime, frames, allowFlip, animations, patterns } = config;
 
     this.id = id;
@@ -100,14 +65,14 @@ ImageSheet.prototype.defineDefaultAnimation = function() {
     defaultAnimation.setFrameTime(this.frameTime);
 
     for(const frameID in this.frames) {
-        const frame = this.createSingleFrame(frameID);
+        const frame = this.createFrame(frameID);
         defaultAnimation.addFrame(frame);
     }
 
     this.loadedAnimations.set(ImageSheet.DEFAULT_ANIMATION_ID, defaultAnimation);
 }
 
-ImageSheet.prototype.createSingleFrame = function(frameID) {
+ImageSheet.prototype.createFrame = function(frameID) {
     const frame = [];
     const frameData = this.frames[frameID];
 
@@ -116,10 +81,13 @@ ImageSheet.prototype.createSingleFrame = function(frameID) {
         return frame;
     }
 
+    const { offset } = frameData;
+    const { x, y } = offset;
+
     const component = {
         "id": frameID,
-        "shiftX": 0,
-        "shiftY": 0
+        "shiftX": x,
+        "shiftY": y
     };
     
     frame.push(component);
@@ -131,32 +99,28 @@ ImageSheet.prototype.createPatternFrame = function(patternID) {
     const frame = [];
     const pattern = this.patterns[patternID];
 
-    if(!pattern || pattern.length === 0) {
-        console.error(`Pattern ${patternID} does not exist or is empty!`);
+    if(!pattern) {
+        console.error(`Pattern ${patternID} does not exist!`);
         return frame;
     }
 
-    for(const setup of pattern) {
-        const { id, shiftX, shiftY } = setup;
+    for(const frameSetup of pattern) {
+        const { id, shiftX, shiftY } = frameSetup;
         const frameData = this.frames[id];
-        const component = {
-            "id": id,
-            "shiftX": 0,
-            "shiftY": 0
-        };
 
         if(!frameData) {
             console.error(`Frame ${id} does not exist!`);
             continue;
         }
 
-        if(shiftX) {
-            component.shiftX = shiftX;
-        }
+        const { offset } = frameData;
+        const { x, y } = offset;
 
-        if(shiftY) {
-            component.shiftY = shiftY;
-        }
+        const component = {
+            "id": id,
+            "shiftX": x + (shiftX ?? 0),
+            "shiftY": y + (shiftY ?? 0)
+        };
 
         frame.push(component);
     }
@@ -170,17 +134,23 @@ ImageSheet.prototype.defineAnimations = function() {
         const patternFrame = this.createPatternFrame(patternID);
 
         animation.setFrameTime(this.frameTime);
-        animation.addFrame(patternFrame);
+
+        if(patternFrame.length > 0) {
+            animation.addFrame(patternFrame);
+        }
 
         this.loadedAnimations.set(patternID, animation);
     }
     
     for(const frameID in this.frames) {
         const animation = new Animation(frameID);
-        const frame = this.createSingleFrame(frameID);
+        const frame = this.createFrame(frameID);
 
         animation.setFrameTime(this.frameTime);
-        animation.addFrame(frame);
+
+        if(frame.length > 0) {
+            animation.addFrame(frame);
+        }
 
         this.loadedAnimations.set(frameID, animation);
     }
@@ -193,11 +163,17 @@ ImageSheet.prototype.defineAnimations = function() {
 
         for(const frameID of frames) {
             if(this.frames[frameID]) {
-                const frame = this.createSingleFrame(frameID);
-                animation.addFrame(frame);
+                const frame = this.createFrame(frameID);
+
+                if(frame.length > 0) {
+                    animation.addFrame(frame);
+                }
             } else {
                 const patternFrame = this.createPatternFrame(frameID);
-                animation.addFrame(patternFrame);
+
+                if(patternFrame.length > 0) {
+                    animation.addFrame(patternFrame);
+                }
             }
         }
 

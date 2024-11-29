@@ -3,23 +3,19 @@ import { Logger } from "../logger.js";
 import { ImageSheet } from "./imageSheet.js";
 import { Sprite } from "./drawable/sprite.js";
 import { EventEmitter } from "../events/eventEmitter.js";
+import { ImageManager } from "../resources/imageManager.js";
 
 export const SpriteManager = function() {
-    this.timestamp = 0;
-    this.spriteTypes = {};
-    this.sprites = new Map();
-    this.spriteReferences = new Map();
+    this.resources = new ImageManager();
     this.idGenerator = new IDGenerator("@SPRITE");
+    this.sprites = new Map();
+    this.spriteTypes = {};
+    this.timestamp = 0;
     this.layers = {
         [SpriteManager.LAYER_BOTTOM]: [],
         [SpriteManager.LAYER_MIDDLE]: [],
         [SpriteManager.LAYER_TOP]: []
     };
-    this.layerStack = [
-        SpriteManager.LAYER_BOTTOM,
-        SpriteManager.LAYER_MIDDLE,
-        SpriteManager.LAYER_TOP
-    ];
 }
 
 SpriteManager.LAYER_BOTTOM = 0;
@@ -28,7 +24,30 @@ SpriteManager.LAYER_TOP = 2;
 
 SpriteManager.prototype.load = function(spriteTypes) {
     if(typeof spriteTypes === "object") {
-        this.spriteTypes = spriteTypes;
+        this.loadSpriteTypes(spriteTypes);
+
+        const usedMB = [];
+        const usedMBLarge = [];
+
+        this.resources.loadImages(spriteTypes, ((key, image) => {
+            const imageSize = image.width * image.height * 4;
+            const imageSizeMB = imageSize / ImageManager.SIZE_MB;
+        
+            if(imageSize >= ImageManager.SIZE_BIG_IMAGE) {
+              usedMBLarge.push({
+                "imageID": key,
+                "imageSizeMB": imageSizeMB
+              });
+            }
+        
+            usedMB.push({
+              "imageID": key,
+              "imageSizeMB": imageSizeMB
+            });
+          }), (key, error) => console.error(key, error));
+
+          console.log(usedMB, usedMBLarge);
+          
     } else {
         Logger.log(false, "SpriteTypes cannot be undefined!", "SpriteManager.prototype.load", null);
     }
@@ -41,44 +60,16 @@ SpriteManager.prototype.update = function(gameContext) {
     this.timestamp = realTime;
 }
 
-SpriteManager.prototype.removeSpriteReference = function(spriteID) {
-    if(!this.spriteTypes[spriteID]) {
-        Logger.log(false, "SpriteType does not exist!", "SpriteManager.prototype.removeSpriteReference", { spriteID });
+SpriteManager.prototype.loadSpriteTypes = function(spriteTypes) {
+    for(const typeID in spriteTypes) {
+        const spriteType = spriteTypes[typeID];
+        const imageSheet = new ImageSheet(typeID);
 
-        return false;
+        imageSheet.load(spriteType);
+        imageSheet.defineDefaultAnimation();
+
+        this.spriteTypes[typeID] = imageSheet;
     }
-
-    const count = this.spriteReferences.get(spriteID);
-
-    if(count !== undefined) {
-        this.spriteReferences.set(spriteID, count - 1);
-
-        if(count - 1 <= 0) {
-            this.spriteReferences.delete(spriteID);
-            //UNLOAD THE SPRITE!
-        }
-    }
-
-    return true;
-}
-
-SpriteManager.prototype.addSpriteReference = function(spriteID) {
-    if(!this.spriteTypes[spriteID]) {
-        Logger.log(false, "SpriteType does not exist!", "SpriteManager.prototype.addSpriteReference", { spriteID });
-
-        return false;
-    }
-
-    const count = this.spriteReferences.get(spriteID);
-
-    if(count === undefined) {
-        this.spriteReferences.set(spriteID, 1);
-        this.spriteTypes[spriteID].toBuffer();
-    } else {
-        this.spriteReferences.set(spriteID, count + 1);
-    }
-
-    return true;
 }
 
 SpriteManager.prototype.end = function() {
@@ -109,16 +100,20 @@ SpriteManager.prototype.createSprite = function(typeID, layerID = null, animatio
     }
 
     this.updateSprite(sprite.id, typeID, animationID);
-    this.addSpriteReference(typeID);
+    this.resources.addReference(typeID);
 
     return sprite;
 }
 
 SpriteManager.prototype.drawSprite = function(sprite, context, viewportX, viewportY, localX, localY) {
     const { typeID, animationID, currentFrame, isFlipped } = sprite;
+    const spriteBuffer = this.resources.getImage(typeID);
+
+    if(!spriteBuffer) {
+        return;
+    }
 
     const spriteType = this.spriteTypes[typeID];
-    const spriteBuffer = spriteType.getImage();
     const spriteBounds = spriteType.getBounds();
     const animationType = spriteType.getAnimation(animationID);
     const animationFrame = animationType.getFrame(currentFrame);
@@ -273,8 +268,8 @@ SpriteManager.prototype.updateSprite = function(spriteID, typeID, animationID = 
         sprite.initialize(config);
 
         this.initializeBounds(sprite);
-        this.addSpriteReference(typeID);
-        //this.removeSpriteReference(spriteTypeID);
+        this.resources.addReference(typeID);
+        this.resources.removeReference(spriteTypeID);
     }
 
     return true;

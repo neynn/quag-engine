@@ -1,41 +1,21 @@
-import { ImageSheet } from "./source/graphics/imageSheet.js";
-import { GlobalResourceManager } from "./source/resourceManager.js";
-import { ExampleContext } from "./exampleContext.js";
+import { ResourceManager } from "./source/resourceManager.js";
+
+import { ExampleContext } from "./game/exampleContext.js";
 
 const gameContext = new ExampleContext();
+const resourceManager = new ResourceManager();
 
-GlobalResourceManager.setServerAddress("EXAMPLE_ADDRESS");
-
-GlobalResourceManager.loadMain("assets", "files.json").then(async files => {
-    const sprites = {};
-    const tiles = {};
-
-    await GlobalResourceManager.loadImages(files.sprites, ((key, image, config) => {
-        const imageSheet = new ImageSheet(image, config);
-        imageSheet.defineDefaultAnimation();
-        sprites[key] = imageSheet;
-    }));
-
-    await GlobalResourceManager.loadImages(files.tiles, ((key, image, config) => {
-        const imageSheet = new ImageSheet(image, config);
-        imageSheet.defineAnimations();
-        imageSheet.defineDefaultAnimation();
-        tiles[key] = imageSheet;
-    }));
-
+resourceManager.loadMain("assets", "assets.json").then(async files => {
     const fontPromises = [];
 
     for(const fontID in files.fonts) {
         const fontMeta = files.fonts[fontID];
-        const fontPromise = GlobalResourceManager.loadCSSFont(fontMeta);
+        const fontPromise = resourceManager.loadCSSFont(fontMeta);
 
         fontPromises.push(fontPromise);
     }
 
     await Promise.allSettled(fontPromises);
-
-    files.sprites = sprites;
-    files.tiles = tiles;
 
     return files;
 }).then(resources => {

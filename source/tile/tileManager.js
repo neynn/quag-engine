@@ -1,15 +1,22 @@
+import { ImageSheet } from "../graphics/imageSheet.js";
 import { Logger } from "../logger.js";
+import { ImageManager } from "../resources/imageManager.js";
 
 export const TileManager = function() {
+    this.resources = new ImageManager();
+    this.dynamicTileTypes = {};
     this.tileTypes = {};
     this.tileMeta = {};
-    this.dynamicTileTypes = {};
 }
 
 TileManager.prototype.load = function(tileTypes, tileMeta) {
     if(typeof tileTypes === "object") {
-        this.tileTypes = tileTypes;
-        this.loadDynamicTileTypes();
+        this.loadTileTypes(tileTypes);
+
+        this.resources.loadImages(tileTypes,
+        (key, image) => this.resources.addReference(key),
+        (key, error) => console.error(key, error));
+
     } else {
         Logger.log(false, "TileTypes cannot be undefined!", "TileManager.prototype.load", null);
     }
@@ -38,45 +45,9 @@ TileManager.prototype.updateDynamicTileTypes = function(timestamp) {
 
         for(const animationID of dynamicAnimationList) {
             const animation = dynamicTileType.getAnimation(animationID);
-            const currentFrameTime = timestamp % animation.frameTimeTotal;
-            const frameIndex = Math.floor(currentFrameTime / animation.frameTime);
-
-            animation.setFrameIndex(frameIndex);
+            animation.updateFrameIndex(timestamp);
         }
     }
-}
-
-TileManager.prototype.drawTileGraphics = function(tileID, context, renderX, renderY, scaleX = 1, scaleY = 1) {
-    const { set, animation } = this.getTileMeta(tileID);
-    
-    const tileType = this.tileTypes[set];
-    const tileBuffer = tileType.getImage();
-    const tileAnimation = tileType.getAnimation(animation);
-    const currentFrame = tileAnimation.getCurrentFrame();
-
-    for(const component of currentFrame) {
-        const { id, shiftX, shiftY } = component;
-        const { x, y, w, h, offset } = tileType.getFrameByID(id);
-        const drawX = renderX + (offset.x + shiftX) * scaleX;
-        const drawY = renderY + (offset.y + shiftY) * scaleY;
-        const drawWidth = w * scaleX;
-        const drawHeight = h * scaleY;
-
-        context.drawImage(
-            tileBuffer,
-            x, y, w, h,
-            drawX, drawY, drawWidth, drawHeight
-        );
-    }
-}
-
-TileManager.prototype.drawEmptyTile = function(context, renderX, renderY, width, height) {
-    context.fillStyle = "#701867";
-    context.fillRect(renderX, renderY, width, height);
-    context.fillRect(renderX + width, renderY + height, width, height);
-    context.fillStyle = "#000000";
-    context.fillRect(renderX + width, renderY, width, height);
-    context.fillRect(renderX, renderY + height, width, height);
 }
 
 TileManager.prototype.invertTileMeta = function() {
@@ -91,20 +62,26 @@ TileManager.prototype.invertTileMeta = function() {
     }
 }
 
-TileManager.prototype.loadDynamicTileTypes = function() {
-    for(const typeID in this.tileTypes) {
-        const tileSet = this.tileTypes[typeID];
-        const animations = tileSet.getAnimations();
+TileManager.prototype.loadTileTypes = function(tileTypes) {
+    for(const typeID in tileTypes) {
+        this.dynamicTileTypes[typeID] = [];
+
+        const tileType = tileTypes[typeID];
+        const imageSheet = new ImageSheet(typeID);
+
+        imageSheet.load(tileType);
+        imageSheet.defineAnimations();
+        imageSheet.defineDefaultAnimation();
+
+        const animations = imageSheet.getAnimations();
 
         for(const [animationID, animation] of animations) {
             if(animation.frameCount > 1) {
-                if(this.dynamicTileTypes[typeID] === undefined) {
-                    this.dynamicTileTypes[typeID] = [];
-                }
-
                 this.dynamicTileTypes[typeID].push(animationID);
             }
         }
+
+        this.tileTypes[typeID] = imageSheet;
     }
 }
 
