@@ -1,10 +1,11 @@
-{   
-    "uiConfig": { "id": "uiConfig", "directory": "assets/config", "source": "uiConfig.json" },
-    "config": { "id": "config", "directory": "assets/config", "source": "config.json" },
+{
+    "interfaces": { "id": "interfaces", "directory": "assets/config", "source": "interfaces.json" },
+    "world": { "id": "world", "directory": "assets/config", "source": "world.json" },
     "settings": { "id": "settings", "directory": "assets/config", "source": "settings.json" },
     "tileMeta": { "id": "tileMeta", "directory": "assets/config", "source": "tileMeta.json" },
-    "components": { "id": "components", "directory": "assets/entity", "source": "components.json" },
+    "controllers": { "id": "controllers", "directory": "assets/config", "source": "controllers.json" },
     "entities": { "id": "entities", "directory": "assets/entity", "source": "entities.json" },
+    "components": { "id": "components", "directory": "assets/entity", "source": "components.json" },
     "traits": { "id": "traits", "directory": "assets/entity", "source": "traits.json" },
     "fonts": { "id": "fonts", "directory": "assets/fonts", "source": "fonts.json" },
     "icons": { "id": "icons", "directory": "assets/icons", "source": "icons.json" },

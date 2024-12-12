@@ -1,8 +1,8 @@
 import { Camera } from "../camera.js";
 import { lerpValue } from "../../math/math.js";
 
-export const MoveableCamera = function(positionX, positionY, viewportWidth, viewportHeight) {
-    Camera.call(this, positionX, positionY, viewportWidth, viewportHeight);
+export const MoveableCamera = function() {
+    Camera.call(this);
     
     this.viewportX = 0;
     this.viewportY = 0;
@@ -26,10 +26,6 @@ MoveableCamera.prototype.loadWorld = function(worldWidth, worldHeight) {
     this.worldHeight = worldHeight;
 }
 
-MoveableCamera.prototype.onViewportLoad = function() {
-    this.reloadViewportLimit();
-}
-
 MoveableCamera.prototype.centerWorld = function() {
     const positionX = this.worldWidth / 2;
     const positionY = this.worldHeight / 2;
@@ -37,7 +33,7 @@ MoveableCamera.prototype.centerWorld = function() {
     this.centerViewport(positionX, positionY);
 }
 
-MoveableCamera.prototype.reloadViewportLimit = function() {
+MoveableCamera.prototype.reloadViewport = function() {
     const viewportWidth = this.getViewportWidth();
     const viewportHeight = this.getViewportHeight();
 
@@ -54,6 +50,16 @@ MoveableCamera.prototype.reloadViewportLimit = function() {
     }
 
     this.limitViewport();
+}
+
+MoveableCamera.prototype.cutViewport = function(windowWidth, windowHeight) {
+    if(this.worldWidth < windowWidth) {
+        this.viewportWidth = this.worldWidth;
+    }
+
+    if(this.worldHeight < windowHeight) {
+        this.viewportHeight = this.worldHeight;
+    }
 }
 
 MoveableCamera.prototype.limitViewport = function() {
@@ -105,12 +111,12 @@ MoveableCamera.prototype.centerViewport = function(positionX, positionY) {
 
 MoveableCamera.prototype.bindViewport = function() {
     this.isBound = true;
-    this.reloadViewportLimit();
+    this.limitViewport();
 }
 
 MoveableCamera.prototype.unbindViewport = function() {
     this.isBound = false;
-    this.reloadViewportLimit();
+    this.limitViewport();
 }
 
 MoveableCamera.prototype.screenToWorld = function(screenX, screenY) {

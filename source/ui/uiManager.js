@@ -1,4 +1,5 @@
-import { EffectManager } from "../effects/effectManager.js";
+import { createFadeInEffect } from "../effects/example/fadeIn.js";
+import { createFadeOutEffect } from "../effects/example/fadeOut.js";
 import { Logger } from "../logger.js";
 import { Renderer } from "../renderer.js";
 import { ImageManager } from "../resources/imageManager.js";
@@ -12,7 +13,6 @@ import { TextElement } from "./elements/textElement.js";
 import { UIElement } from "./uiElement.js";
 
 export const UIManager = function() {
-    this.effectManager = new EffectManager();
     this.resources = new ImageManager();
     this.interfaceTypes = {};
     this.iconTypes = {};
@@ -25,11 +25,18 @@ export const UIManager = function() {
         [UIManager.ELEMENT_TYPE_ICON]: Icon,
         [UIManager.ELEMENT_TYPE_CONTAINER]: Container
     };
+    this.effectTypes = {
+        [UIManager.EFFECT_TYPE_FADE_IN]: createFadeInEffect,
+        [UIManager.EFFECT_TYPE_FADE_OUT]: createFadeOutEffect
+    }
     this.interfaceStack = [];
     this.elements = new Map();
-    this.parentElements = new Set();
+    this.origins = new Set();
     this.previousCollisions = new Set();
 }
+
+UIManager.EFFECT_TYPE_FADE_IN = "FADE_IN";
+UIManager.EFFECT_TYPE_FADE_OUT = "FADE_OUT";
 
 UIManager.ELEMENT_TYPE_TEXT = "TEXT";
 UIManager.ELEMENT_TYPE_DYNAMIC_TEXT = "DYNAMIC_TEXT";
@@ -93,35 +100,7 @@ UIManager.prototype.getElementByID = function(uniqueID) {
     return element;
 }
 
-UIManager.prototype.getButton = function(interfaceID, buttonID) {
-    if(this.interfaceTypes[interfaceID] === undefined) {
-        return null;
-    }
-
-    const button = this.getElement(interfaceID, buttonID);
-
-    if(!button || !(button instanceof Button)) {
-        return null;
-    }
-
-    return button;
-}
-
-UIManager.prototype.getText = function(interfaceID, textID) {
-    if(this.interfaceTypes[interfaceID] === undefined) {
-        return null;
-    }
-
-    const text = this.getElement(interfaceID, textID);
-
-    if(!text || !(text instanceof TextElement)) {
-        return null;
-    }
-
-    return text;
-}
-
-UIManager.prototype.createElement = function(uniqueID, typeID) {
+UIManager.prototype.createElement = function(uniqueID, typeID, config) {
     const Type = this.elementTypes[typeID];
 
     if(!Type) {
@@ -129,6 +108,8 @@ UIManager.prototype.createElement = function(uniqueID, typeID) {
     }
 
     const element = new Type(uniqueID);
+
+    element.loadFromConfig(config);
 
     this.elements.set(uniqueID, element);
 
@@ -140,14 +121,12 @@ UIManager.prototype.destroyElement = function(uniqueID) {
 
     if(!element) {
         Logger.log(false, "Element does not exist!", "UIManager.prototype.destroyElement", {uniqueID});
-
-        return false;
+        return;
     }
 
     element.closeFamily();
-    this.elements.delete(uniqueID);
 
-    return true;
+    this.elements.delete(uniqueID);
 }
 
 UIManager.prototype.pushInterface = function(userInterfaceID) {
@@ -155,8 +134,7 @@ UIManager.prototype.pushInterface = function(userInterfaceID) {
 
     if(!userInterface) {
         Logger.log(false, "Interface does not exist!", "UIManager.prototype.pushInterface", {userInterfaceID});
-
-        return false;
+        return;
     }
 
     const uniqueElementIDs = new Set();
@@ -171,8 +149,6 @@ UIManager.prototype.pushInterface = function(userInterfaceID) {
         "id": userInterfaceID,
         "elementUIDs": uniqueElementIDs
     });
-
-    return true;
 }
 
 UIManager.prototype.popInterface = function(userInterfaceID) {
@@ -186,37 +162,21 @@ UIManager.prototype.popInterface = function(userInterfaceID) {
 
             this.interfaceStack.splice(i, 1);
             
-            return true;
+            break;
         }
     }
-
-    return false;
 }
 
 UIManager.prototype.update = function(gameContext) {
     const { timer, client } = gameContext;
     const { cursor } = client;
-    const deltaTime = timer.getDeltaTime();
-    const activeEffects = this.effectManager.getActiveEffects();
 
-    for(const [effectID, { drawableID, onCall }] of activeEffects) {
-        const element = this.elements.get(drawableID);
-
-        if(!element) {
-            this.effectManager.markEffectForDeletion(effectID);
-            continue;
-        }
-
-        onCall(element, deltaTime);
-    }
-
-    this.effectManager.deleteCompletedEffects();
     this.updateElementCollisions(cursor.position.x, cursor.position.y, cursor.radius);
 }
 
 UIManager.prototype.end = function() {
     this.elements.clear();
-    this.parentElements.clear();
+    this.origins.clear();
     this.interfaceStack = [];
 }
 
@@ -247,8 +207,8 @@ UIManager.prototype.updateElementCollisions = function(mouseX, mouseY, mouseRang
     this.previousCollisions = currentCollisions;
 }
 
-UIManager.prototype.getParentElements = function() {
-    return this.parentElements;
+UIManager.prototype.getOriginIDs = function() {
+    return this.origins;
 }
 
 UIManager.prototype.getCollidedElements = function(mouseX, mouseY, mouseRange) {
@@ -258,7 +218,7 @@ UIManager.prototype.getCollidedElements = function(mouseX, mouseY, mouseRange) {
         return [];
     }
 
-    for(const elementUID of this.parentElements) {
+    for(const elementUID of this.origins) {
         if(!currentInterface.elementUIDs.has(elementUID)) {
             continue;
         }
@@ -275,31 +235,25 @@ UIManager.prototype.getCollidedElements = function(mouseX, mouseY, mouseRange) {
 }
 
 UIManager.prototype.addClick = function(interfaceID, buttonID, callback) {
-    const button = this.getButton(interfaceID, buttonID);
+    const button = this.getElement(interfaceID, buttonID);
 
-    if(!button) {
+    if(!button || !(button instanceof Button)) {
         Logger.log(false, "Button does not exist!", "UIManager.prototype.addClick", { interfaceID, buttonID });
-
-        return false;
+        return;
     }
 
     button.events.subscribe(UIElement.EVENT_CLICKED, "UI_MANAGER", callback);
-
-    return true;
 }
 
 UIManager.prototype.setText = function(interfaceID, textID, message) {
-    const text = this.getText(interfaceID, textID);
+    const text = this.getElement(interfaceID, textID);
 
-    if(!text) {
+    if(!text || !(text instanceof TextElement)) {
         Logger.log(false, "Text does not exist!", "UIManager.prototype.setText", { interfaceID, textID });
-
-        return false;
+        return;
     }
 
     text.setText(message);
-
-    return true;
 }
 
 UIManager.prototype.addDynamicText = function(interfaceID, textID, onEvent) {
@@ -307,14 +261,12 @@ UIManager.prototype.addDynamicText = function(interfaceID, textID, onEvent) {
 
     if(!text || !(text instanceof DynamicTextElement)) {
         Logger.log(false, "Text does not exist!", "UIManager.prototype.addTextRequest", { interfaceID, textID });
-        return false;
+        return;
     }
 
     this.removeDynamicText(interfaceID, textID);
 
     text.events.subscribe(DynamicTextElement.EVENT_REQUEST_TEXT, "UI_MANAGER", (element) => onEvent(element));
-
-    return true;
 }
 
 UIManager.prototype.removeDynamicText = function(interfaceID, textID) {
@@ -322,53 +274,47 @@ UIManager.prototype.removeDynamicText = function(interfaceID, textID) {
 
     if(!text || !(text instanceof DynamicTextElement)) {
         Logger.log(false, "Text does not exist!", "UIManager.prototype.removeTextRequest", { interfaceID, textID });
-        return false;
+        return;
     }
 
     text.events.mute(DynamicTextElement.EVENT_REQUEST_TEXT);
-
-    return true;
 }
 
-UIManager.prototype.createInterface = function(userInterfaceID) {
+UIManager.prototype.createInterfaceElements = function(userInterfaceID) {
     const userInterface = this.interfaceTypes[userInterfaceID];
     const elements = new Map();
 
     if(!userInterface) {
-        Logger.log(false, "Interface does not exist!", "UIManager.prototype.createInterface", { userInterfaceID });
-
+        Logger.log(false, "Interface does not exist!", "UIManager.prototype.createInterfaceElements", { userInterfaceID });
         return elements;
     }
 
-    for(const configID in userInterface) {
-        const config = userInterface[configID];
-        const uniqueID = this.getUniqueID(userInterfaceID, configID);
-        const element = this.createElement(uniqueID, config.type);
+    for(const elementID in userInterface) {
+        const config = userInterface[elementID];
+        const uniqueID = this.getUniqueID(userInterfaceID, elementID);
+        const element = this.createElement(uniqueID, config.type, config);
 
         if(!element) {
-            Logger.log(false, "Element could not be created!", "UIManager.prototype.createInterface", { userInterfaceID, configID });
-
+            Logger.log(false, "Element could not be created!", "UIManager.prototype.createInterfaceElements", { userInterfaceID, elementID });
             continue;
         }
 
-        element.loadFromConfig(config);
-        elements.set(configID, element);
+        elements.set(elementID, element);
     }
     
-    for(const configID in userInterface) {
-        const config = userInterface[configID];
-        const element = elements.get(configID);
+    for(const elementID in userInterface) {
+        const { children } = userInterface[elementID];
+        const element = elements.get(elementID);
 
-        if(!element || !Array.isArray(config.children)) {
+        if(!element || !Array.isArray(children)) {
             continue;
         }
 
-        for(const childID of config.children) {
+        for(const childID of children) {
             const child = elements.get(childID);
 
             if(!child) {
-                Logger.log(false, "Child is not part of the interface!", "UIManager.prototype.createInterface", { configID, childID, userInterfaceID });
-
+                Logger.log(false, "Child is not part of the interface!", "UIManager.prototype.createInterfaceElements", { elementID, childID, userInterfaceID });
                 continue;
             }
 
@@ -381,46 +327,64 @@ UIManager.prototype.createInterface = function(userInterfaceID) {
     return elements;
 }
 
-UIManager.prototype.parseUI = function(userInterfaceID, gameContext) {
+UIManager.prototype.addEffects = function(gameContext, element, effects = []) {
     const { renderer } = gameContext;
+
+    for(const effectConfig of effects) {
+        const { type, value, threshold } = effectConfig;
+        const effectBuilder = this.effectTypes[type];
+
+        if(!effectBuilder) {
+            continue;
+        }
+
+        const effect = effectBuilder(element, value, threshold);
+
+        renderer.effects.addEffect(effect);
+    }
+}
+
+UIManager.prototype.anchorElement = function(gameContext, element, originalPosition, anchorType = Renderer.ANCHOR_TYPE_TOP_LEFT) {
+    const { renderer } = gameContext;
+    const { bounds } = element;
+    const { w, h } = bounds;
+    const { x, y } = originalPosition;
+
+    const uniqueID = element.getID();
+    const anchor = renderer.getAnchor(anchorType, x, y, w, h);
+            
+    element.setPosition(anchor.x, anchor.y);
+
+    renderer.events.subscribe(Renderer.EVENT_SCREEN_RESIZE, uniqueID, (width, height) => {
+        const anchor = renderer.getAnchor(anchorType, x, y, w, h);
+        
+        element.setPosition(anchor.x, anchor.y);
+    });    
+}
+
+UIManager.prototype.parseUI = function(userInterfaceID, gameContext) {
     const userInterface = this.interfaceTypes[userInterfaceID];
 
     if(!userInterface) {
         Logger.log(false, "Interface does not exist!", "UIManager.prototype.parseUI", { userInterfaceID });
-
-        return false;
+        return;
     }
 
-    const elements = this.createInterface(userInterfaceID);
+    const elements = this.createInterfaceElements(userInterfaceID);
 
     for(const [configID, element] of elements) {
-        const config = userInterface[configID];
-        const elementID = element.getID();
+        const { anchor, effects, position } = userInterface[configID];
+        const uniqueID = element.getID();
 
-        this.effectManager.addEffect(element, config.effects);
+        this.addEffects(gameContext, element, effects);
 
-        if(element.hasParent()) {
-            continue;
+        if(!element.hasParent()) {
+            this.anchorElement(gameContext, element, position, anchor);
+            this.origins.add(uniqueID);
         }
-
-        if(config.anchor) {
-            const { x, y } = renderer.getAnchor(config.anchor, config.position.x, config.position.y, element.bounds.w, element.bounds.h);
-            
-            element.setPosition(x, y);
-
-            renderer.events.subscribe(Renderer.EVENT_SCREEN_RESIZE, elementID, (width, height) => {
-                const { x, y } = renderer.getAnchor(config.anchor, config.position.x, config.position.y, element.bounds.w, element.bounds.h);
-                
-                element.setPosition(x, y);
-            });    
-        }
-
-        this.parentElements.add(elementID);
     }
 
     this.pushInterface(userInterfaceID);
-
-    return true;
 }
 
 UIManager.prototype.unparseUI = function(userInterfaceID, gameContext) {
@@ -429,8 +393,7 @@ UIManager.prototype.unparseUI = function(userInterfaceID, gameContext) {
 
     if(!userInterface) {
         Logger.log(false, "Interface does not exist!", "UIManager.prototype.unparseUI", { userInterfaceID });
-
-        return false;
+        return;
     }
 
     for(const elementID in userInterface) {
@@ -438,14 +401,12 @@ UIManager.prototype.unparseUI = function(userInterfaceID, gameContext) {
 
         this.destroyElement(uniqueID);
 
-        if(this.parentElements.has(uniqueID)) {
-            this.parentElements.delete(uniqueID);
+        if(this.origins.has(uniqueID)) {
+            this.origins.delete(uniqueID);
 
             renderer.events.unsubscribe(Renderer.EVENT_SCREEN_RESIZE, uniqueID);
         }
     }
 
     this.popInterface(userInterfaceID);
-
-    return true;
 }

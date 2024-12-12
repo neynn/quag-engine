@@ -1,6 +1,6 @@
-export const System = function(id, reference) {
+export const System = function(id, onUpdate) {
     this.id = id;
-    this.reference = reference;
+    this.onUpdate = onUpdate;
     this.entities = new Set();
 }   
 
@@ -21,7 +21,8 @@ System.prototype.hasEntity = function(entityID) {
 }
 
 System.prototype.update = function(gameContext) {
-    const { entityManager } = gameContext;
+    const { world } = gameContext;
+    const { entityManager } = world;
     const invalidIDs = [];
 
     for(const entityID of this.entities) {
@@ -32,7 +33,7 @@ System.prototype.update = function(gameContext) {
             continue;
         }
 
-        this.reference(gameContext, entity);
+        this.onUpdate(gameContext, entity);
     }
 
     for(const entityID of invalidIDs) {

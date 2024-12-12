@@ -20,7 +20,6 @@ resourceManager.loadMain("assets", "assets.json").then(async files => {
     return files;
 }).then(resources => {
   gameContext.loadResources(resources);
-  gameContext.addUIClickEvent();
   gameContext.initialize();
-  gameContext.timer.start();
+  gameContext.start();
 });

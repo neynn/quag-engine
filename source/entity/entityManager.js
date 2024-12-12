@@ -1,6 +1,6 @@
 import { IDGenerator } from "../idGenerator.js";
 import { Logger } from "../logger.js";
-import { Entity } from "./entity.js";
+import { WorldEntity } from "./worldEntity.js";
 
 export const EntityManager = function() {
     this.componentTypes = {};
@@ -32,27 +32,26 @@ EntityManager.prototype.load = function(entityTypes, componentTypes, traitTypes)
     }
 }
 
-EntityManager.prototype.registerComponentReference = function(componentID, component) {
+EntityManager.prototype.registerComponent = function(componentID, component) {
     if(!componentID || !componentID) {
-        Logger.log(false, "Parameter is undefined!", "EntityManager.prototype.registerComponentReference", { componentID, component });
-        return false;
+        Logger.log(false, "Parameter is undefined!", "EntityManager.prototype.registerComponent", { componentID, component });
+        return;
     }
 
     const componentType = this.componentTypes[componentID];
 
     if(!componentType) {
-        Logger.log(false, "ComponentType does not exist!", "EntityManager.prototype.registerComponentReference", { componentID });
-        return false;
+        Logger.log(false, "ComponentType does not exist!", "EntityManager.prototype.registerComponent", { componentID });
+        return;
     }
 
     componentType.reference = component;
-
-    return true;
 }
 
 EntityManager.prototype.update = function(gameContext) {
     for(const entityID of this.activeEntities) {
         const entity = this.entities.get(entityID);
+
         entity.states.update(gameContext);
     }
 }
@@ -66,17 +65,15 @@ EntityManager.prototype.end = function() {
 EntityManager.prototype.registerArchetype = function(typeID, type) {
     if(!typeID || !type) {
         Logger.log(false, "Parameter is undefined!", "EntityManager.prototype.registerArchetype", {typeID, type});
-        return false;
+        return;
     }
 
     if(this.archetypes.has(typeID)) {
         Logger.log(false, "Archetype already exists!", "EntityManager.prototype.registerArchetype", {typeID});
-        return false;
+        return;
     }
 
     this.archetypes.set(typeID, type);
-
-    return true;
 }
 
 EntityManager.prototype.saveComponents = function(entity) {
@@ -110,41 +107,37 @@ EntityManager.prototype.saveComponents = function(entity) {
     return savedComponents;
 }
 
-EntityManager.prototype.loadComponents = function(entity, savedComponents) {
-    if(!savedComponents) {
-        Logger.log(false, "SavedComponents cannot be undefined", "EntityManager.prototype.loadComponents", null); 
-        return false; 
+EntityManager.prototype.loadComponentFields = function(component, fields = {}) {
+    for(const fieldID in fields) {
+        if(component[fieldID] === undefined) {
+            Logger.log(false, `Field does not exist on component!`, "EntityManager.prototype.loadComponent", { fieldID }); 
+            continue;
+        }
+
+        component[fieldID] = fields[fieldID];
     }
+}
 
-    for(const componentID in savedComponents) {
+EntityManager.prototype.loadCustomComponents = function(entity, customComponents = {}) {
+    for(const componentID in customComponents) {
         const componentType = this.componentTypes[componentID];
+        const componentFields = customComponents[componentID];
 
-        if(!componentType || !componentType.allowLoad) {
-            Logger.log(false, "Component is not registered as loadable!", "EntityManager.prototype.loadComponents", { componentID }); 
+        if(!componentType) {
+            Logger.log(false, "Component is not registered as customizeable!", "EntityManager.prototype.loadCustomComponents", { componentID }); 
             continue;
         }
 
         const componentConstructor = componentType.reference;
-        const component = entity.getComponent(componentConstructor);
+        const entityComponent = entity.getComponent(componentConstructor);
 
-        if(!component) {
-            Logger.log(false, `Entity does not have component!`, "EntityManager.prototype.loadComponents", { "entityID": entity.id, componentID }); 
+        if(!entityComponent) {
+            Logger.log(false, `Entity does not have component!`, "EntityManager.prototype.loadCustomComponents", { "entityID": entity.id, componentID }); 
             continue;
         }
 
-        const componentSetup = savedComponents[componentID];
-
-        for(const fieldID in componentSetup) {
-            if(component[fieldID] === undefined) {
-                Logger.log(false, `Field does not exist on component!`, "EntityManager.prototype.loadComponents", { fieldID, componentID }); 
-                continue;
-            }
-
-            component[fieldID] = componentSetup[fieldID];
-        }
+        this.loadComponentFields(entityComponent, componentFields);
     }
-
-    return true;
 }
 
 EntityManager.prototype.loadTraits = function(entity, traits) {
@@ -160,62 +153,53 @@ EntityManager.prototype.loadTraits = function(entity, traits) {
         
         for(const componentID in components) {
             const componentType = this.componentTypes[componentID];
+            const componentFields = components[componentID];
 
-            if(!componentType || !componentType.allowLoad) {
+            if(!componentType || !componentType.allowTrait || !componentType.reference) {
                 Logger.log(false, `Component is not registered as loadable!`, "EntityManager.prototype.loadTraits", { traitID, componentID }); 
                 continue;
             }
 
             const componentConstructor = componentType.reference;
+            const entityComponent = entity.getComponent(componentConstructor);
 
-            if(!componentConstructor) {
-                Logger.log(false, `ComponentConstructor is not registered!`, "EntityManager.prototype.loadTraits", { traitID, componentID }); 
-                continue;
-            }
-
-            if(!entity.hasComponent(componentConstructor)) {
-                entity.addComponent(new componentConstructor())
+            if(!entityComponent) {
+                const component = new componentConstructor();
+                this.loadComponentFields(component, componentFields);
+                entity.addComponent(component);
+            } else {
+                this.loadComponentFields(entityComponent, componentFields);
             }
         }
-
-        this.loadComponents(entity, components);
     }
 }
 
 EntityManager.prototype.enableEntity = function(entityID) {
     if(!this.entities.has(entityID)) {
         Logger.log(false, "Entity does not exist!", "EntityManager.prototype.enableEntity", {entityID});
-
-        return false;
+        return;
     }
 
     if(this.activeEntities.has(entityID)) {
         Logger.log(false, "Entity is already active!", "EntityManager.prototype.enableEntity", {entityID});
-
-        return false;
+        return;
     }
 
     this.activeEntities.add(entityID);
-
-    return true;
 }
 
 EntityManager.prototype.disableEntity = function(entityID) {
     if(!this.entities.has(entityID)) {
         Logger.log(false, "Entity does not exist!", "EntityManager.prototype.disableEntity", {entityID});
-
-        return false;
+        return;
     }
 
     if(!this.activeEntities.has(entityID)) {
         Logger.log(false, "Entity is not active!", "EntityManager.prototype.disableEntity", {entityID});
-
-        return false;
+        return;
     }
 
     this.activeEntities.delete(entityID);
-
-    return true;
 }
 
 EntityManager.prototype.getEntity = function(entityID) {
@@ -229,7 +213,7 @@ EntityManager.prototype.getEntity = function(entityID) {
 EntityManager.prototype.createEntity = function(entityTypeID, externalID) {    
     const config = this.entityTypes[entityTypeID];
     const entityID = externalID || this.idGenerator.getID();
-    const entity = new Entity(entityID, entityTypeID);
+    const entity = new WorldEntity(entityID, entityTypeID);
    
     if(typeof config === "object") {
         entity.setConfig(config);
@@ -248,8 +232,7 @@ EntityManager.prototype.buildEntity = function(gameContext, entity, typeID, setu
 
     if(!entityType) {
         Logger.error(false, "EntityType does not exist!", "EntityManager.prototype.buildEntity", { typeID });
-
-        return false;
+        return;
     }
 
     const archetypeID = entityType.archetype;
@@ -257,20 +240,16 @@ EntityManager.prototype.buildEntity = function(gameContext, entity, typeID, setu
 
     if(!archetype) {
         Logger.error(false, "Archetype does not exist!", "EntityManager.prototype.buildEntity", { archetypeID, typeID });
-
-        return false;
+        return;
     }
 
     archetype.build(gameContext, entity, entityType, setup);
-
-    return true;
 } 
 
 EntityManager.prototype.destroyEntity = function(entityID) {
     if(!this.entities.has(entityID)) {
         Logger.log(false, "Entity does not exist!", "EntityManager.prototype.destroyEntity", {entityID});
-
-        return false;
+        return;
     }
 
     if(this.activeEntities.has(entityID)) {
@@ -278,6 +257,4 @@ EntityManager.prototype.destroyEntity = function(entityID) {
     }
     
     this.entities.delete(entityID);
-
-    return true;
 }

@@ -1,13 +1,15 @@
+import { Camera } from "./camera/camera.js";
 import { Canvas } from "./camera/canvas.js";
 import { FPSCounter } from "./camera/fpsCounter.js";
+import { EffectManager } from "./effects/effectManager.js";
 import { EventEmitter } from "./events/eventEmitter.js";
-import { Logger } from "./logger.js";
 import { isRectangleRectangleIntersect } from "./math/math.js";
 
 export const Renderer = function() {
     this.windowWidth = window.innerWidth;
     this.windowHeight = window.innerHeight;
 
+    this.effects = new EffectManager();
     this.fpsCounter = new FPSCounter();
 
     this.display = new Canvas();
@@ -18,7 +20,6 @@ export const Renderer = function() {
     this.events.listen(Renderer.EVENT_CAMERA_FINISH);
 
     this.cameras = new Map();
-    this.cameraTypes = new Map();
     this.cameraStack = [];
 
     window.addEventListener("resize", () => {
@@ -39,9 +40,9 @@ Renderer.ANCHOR_TYPE_TOP_RIGHT = "TOP_RIGHT";
 Renderer.ANCHOR_TYPE_BOTTOM_CENTER = "BOTTOM_CENTER";
 Renderer.ANCHOR_TYPE_BOTTOM_LEFT = "BOTTOM_LEFT";
 Renderer.ANCHOR_TYPE_BOTTOM_RIGHT = "BOTTOM_RIGHT";
-Renderer.ANCHOR_TYPE_RIGHT_CENTER = "RIGHT_CENTER";
-Renderer.ANCHOR_TYPE_LEFT_CENTER = "LEFT_CENTER";
 Renderer.ANCHOR_TYPE_CENTER = "CENTER";
+Renderer.ANCHOR_TYPE_LEFT = "LEFT";
+Renderer.ANCHOR_TYPE_RIGHT = "RIGHT";
 
 Renderer.prototype.getContext = function() {
     return this.display.context;
@@ -55,36 +56,6 @@ Renderer.prototype.getHeight = function() {
     return this.windowHeight;
 }
 
-Renderer.prototype.registerCamera = function(typeID, type) {
-    if(!typeID || !type) {
-        Logger.log(false, "Parameter is undefined!", "Renderer.prototype.registerCamera ", { typeID, type });
-
-        return false;
-    }
-
-    if(this.cameraTypes.has(typeID)) {
-        Logger.log(false, "CameraType is already registered!", "Renderer.prototype.registerCamera", {typeID});
-
-        return false;
-    }
-
-    this.cameraTypes.set(typeID, type);
-
-    return true;
-}
-
-Renderer.prototype.unregisterCamera = function(typeID) {
-    if(!this.cameraTypes.has(typeID)) {
-        Logger.log(false, "CameraType does not exist!", "Renderer.prototype.unregisterCamera", { typeID });
-
-        return false;
-    }
-
-    this.cameraTypes.delete(typeID);
-
-    return true;
-}
-
 Renderer.prototype.getCamera = function(cameraID) {
     const camera = this.cameras.get(cameraID);
 
@@ -95,28 +66,28 @@ Renderer.prototype.getCamera = function(cameraID) {
     return camera;
 }
 
-Renderer.prototype.createCamera = function(cameraID, typeID, x, y, w, h) {
-    const CameraType = this.cameraTypes.get(typeID);
+Renderer.prototype.reloadCamera = function(cameraID) {
+    const camera = this.cameras.get(cameraID);
 
-    if(!CameraType) {
-        return null;
+    if(!camera) {
+        return;
     }
 
-    if(this.cameras.has(cameraID)) {
-        return null;
-    }
+    camera.onWindowResize(this.windowWidth, this.windowHeight);
+}
 
-    const camera = new CameraType(x, y, w, h);
+Renderer.prototype.addCamera = function(cameraID, camera) {
+    if(!(camera instanceof Camera) || this.cameras.has(cameraID)) {
+        return;
+    }
 
     this.cameras.set(cameraID, camera);
     this.cameraStack.push(cameraID);
-
-    return camera;
 }
 
-Renderer.prototype.destroyCamera = function(cameraID) {
+Renderer.prototype.removeCamera = function(cameraID) {
     if(!this.cameras.has(cameraID)) {
-        return false;
+        return;
     }
 
     this.cameras.delete(cameraID);
@@ -129,35 +100,37 @@ Renderer.prototype.destroyCamera = function(cameraID) {
             break;
         }
     }
-
-    return true;
 }
 
 Renderer.prototype.drawUI = function(gameContext) {
     const { uiManager, timer } = gameContext;
     const realTime = timer.getRealTime();
     const deltaTime = timer.getDeltaTime();
-    const parentElements = uiManager.getParentElements();
+    const originIDs = uiManager.getOriginIDs();
 
-    for(const elementID of parentElements) {    
+    for(const elementID of originIDs) {    
         const element = uiManager.getElementByID(elementID);
            
         element.update(realTime, deltaTime);
         element.draw(this.display.context, 0, 0);
-
-        if((Renderer.DEBUG & Renderer.DEBUG_INTERFACE) !== 0) {
-            element.debug(this.display.context, 0, 0);
-        }
     }
 }
 
-Renderer.prototype.drawCameraOutlines = function() {
+Renderer.prototype.drawUIDebug = function(gameContext) {
+    const { uiManager } = gameContext;
+    const originIDs = uiManager.getOriginIDs();
+
+    for(const elementID of originIDs) {    
+        const element = uiManager.getElementByID(elementID);
+
+        element.debug(this.display.context, 0, 0);
+    }
+}
+
+Renderer.prototype.drawCameraDebug = function() {
     this.display.context.strokeStyle = "#eeeeee";
     this.display.context.lineWidth = 3;
-
-    for(const [cameraID, camera] of this.cameras) {
-        this.display.context.strokeRect(camera.position.x, camera.position.y, camera.viewportWidth, camera.viewportHeight);
-    }
+    this.cameras.forEach(camera => this.display.context.strokeRect(camera.position.x, camera.position.y, camera.viewportWidth, camera.viewportHeight));
 }
 
 Renderer.prototype.update = function(gameContext) {
@@ -168,21 +141,24 @@ Renderer.prototype.update = function(gameContext) {
     this.display.clear();
     this.fpsCounter.update(deltaTime);
 
-    for(const [cameraID, camera] of this.cameras) {
+    this.cameras.forEach(camera => {
         context.save();
-        context.beginPath();
-        context.rect(camera.position.x, camera.position.y, camera.viewportWidth, camera.viewportHeight);
-        context.clip();
         camera.update(gameContext);
-        this.events.emit(Renderer.EVENT_CAMERA_FINISH, this, camera);
+        this.events.emit(Renderer.EVENT_CAMERA_FINISH, camera);
         context.restore();
-    }
+    });
+
+    this.effects.update(gameContext);
 
     if((Renderer.DEBUG & Renderer.DEBUG_CAMERA) !== 0) {
-        this.drawCameraOutlines();
+        this.drawCameraDebug();
     }
 
     this.drawUI(gameContext);
+
+    if((Renderer.DEBUG & Renderer.DEBUG_INTERFACE) !== 0) {
+        this.drawUIDebug(gameContext);
+    }
 }
 
 Renderer.prototype.resizeDisplay = function(width, height) {
@@ -228,7 +204,7 @@ Renderer.prototype.getAnchor = function(type, originX, originY, width, height) {
             y = this.windowHeight - originY - height;
             break;
         }
-        case Renderer.ANCHOR_TYPE_LEFT_CENTER: {
+        case Renderer.ANCHOR_TYPE_LEFT: {
             x = originX;
             y = this.windowHeight / 2 - originY - height / 2;
             break;
@@ -238,7 +214,7 @@ Renderer.prototype.getAnchor = function(type, originX, originY, width, height) {
             y = this.windowHeight / 2 - originY - height / 2;
             break;
         }
-        case Renderer.ANCHOR_TYPE_RIGHT_CENTER: {
+        case Renderer.ANCHOR_TYPE_RIGHT: {
             x = this.windowWidth - originX - width;
             y = this.windowHeight / 2 - originY - height / 2;
             break;
@@ -271,10 +247,4 @@ Renderer.prototype.getCollidedCamera = function(mouseX, mouseY, mouseRange) {
     }
 
     return null;
-}
-
-Renderer.prototype.centerCamera = function(cameraID) {
-    //(viewportWidth - width) / 2 <- offset!
-    //width refers to mapWidth * Camera.TILE_WIDTH
-    //The camera is centered on the screen!
 }

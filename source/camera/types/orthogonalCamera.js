@@ -1,8 +1,8 @@
 import { clampValue } from "../../math/math.js";
 import { MoveableCamera } from "./moveableCamera.js";
 
-export const OrthogonalCamera = function(positionX, positionY, viewportWidth, viewportHeight) {
-    MoveableCamera.call(this, positionX, positionY, viewportWidth, viewportHeight);
+export const OrthogonalCamera = function() {
+    MoveableCamera.call(this);
 
     this.tileWidth = 0;
     this.tileHeight = 0;
@@ -12,11 +12,39 @@ export const OrthogonalCamera = function(positionX, positionY, viewportWidth, vi
     this.mapHeight = 0;
 }
 
-OrthogonalCamera.EMPTY_TILE_COLOR_A = "#701867";
-OrthogonalCamera.EMPTY_TILE_COLOR_B = "#000000";
-
 OrthogonalCamera.prototype = Object.create(MoveableCamera.prototype);
 OrthogonalCamera.prototype.constructor = OrthogonalCamera;
+
+OrthogonalCamera.prototype.drawTileGraphics = function(gameContext, tileID, renderX, renderY, scaleX = 1, scaleY = 1) {
+    const { tileManager, renderer } = gameContext;
+    const { resources } = tileManager;
+    const { set, animation } = tileManager.getTileMeta(tileID);
+    const tileBuffer = resources.getImage(set);
+
+    if(!tileBuffer) {
+        return;
+    }
+
+    const tileType = tileManager.tileTypes[set];
+    const tileAnimation = tileType.getAnimation(animation);
+    const currentFrame = tileAnimation.getCurrentFrame();
+    const context = renderer.getContext();
+
+    for(const component of currentFrame) {
+        const { id, shiftX, shiftY } = component;
+        const { x, y, w, h } = tileType.getFrameByID(id);
+        const drawX = renderX + shiftX * scaleX;
+        const drawY = renderY + shiftY * scaleY;
+        const drawWidth = w * scaleX;
+        const drawHeight = h * scaleY;
+
+        context.drawImage(
+            tileBuffer,
+            x, y, w, h,
+            drawX, drawY, drawWidth, drawHeight
+        );
+    }
+}
 
 OrthogonalCamera.prototype.loadTileDimensions = function(tileWidth, tileHeight) {
     this.tileWidth = tileWidth;
@@ -34,7 +62,7 @@ OrthogonalCamera.prototype.loadWorld = function(mapWidth, mapHeight) {
     this.worldWidth = worldWidth;
     this.worldHeight = worldHeight;
 
-    this.reloadViewportLimit();
+    this.reloadViewport();
 }
 
 OrthogonalCamera.prototype.screenToWorldTile = function(screenX, screenY) {
@@ -127,11 +155,15 @@ OrthogonalCamera.prototype.transformTileToPositionCenter = function(tileX, tileY
 	}
 }
 
-OrthogonalCamera.prototype.drawEmptyTile = function(context, renderX, renderY, width, height) {
-    context.fillStyle = OrthogonalCamera.EMPTY_TILE_COLOR_A;
-    context.fillRect(renderX, renderY, width, height);
-    context.fillRect(renderX + width, renderY + height, width, height);
-    context.fillStyle = OrthogonalCamera.EMPTY_TILE_COLOR_B;
-    context.fillRect(renderX + width, renderY, width, height);
-    context.fillRect(renderX, renderY + height, width, height);
+OrthogonalCamera.prototype.drawEmptyTile = function(context, renderX, renderY, scaleX = 1, scaleY = 1) {
+    const scaledX = this.halfTileWidth * scaleX;
+    const scaledY = this.halfTileHeight * scaleY;
+
+    context.fillStyle = "#000000";
+    context.fillRect(renderX, renderY, scaledX, scaledY);
+    context.fillRect(renderX + scaledX, renderY + scaledY, scaledX, scaledY);
+
+    context.fillStyle = "#701867";
+    context.fillRect(renderX + scaledX, renderY, scaledX, scaledY);
+    context.fillRect(renderX, renderY + scaledY, scaledX, scaledY);
 }

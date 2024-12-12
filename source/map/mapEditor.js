@@ -122,13 +122,10 @@ MapEditor.prototype.reloadAll = function() {
 MapEditor.prototype.loadConfig = function(config) {
     if(config === undefined) {
         Logger.log(false, "Config cannot be undefined!", "MapEditor.prototype.loadConfig", null);
-
-        return false;
+        return;
     }
 
     this.config = config;
-
-    return true;
 }
 
 MapEditor.prototype.loadBrushSets = function(tileMeta) {
@@ -163,26 +160,26 @@ MapEditor.prototype.setBrush = function(brush = null) {
 
 MapEditor.prototype.undo = function(gameContext) {
     if(this.activityStack.length === 0) {
-        return false;
+        return;
     }
 
-    const { mapManager } = gameContext;
+    const { world } = gameContext;
+    const { mapManager } = world;
     const { mapID, mode, actions } = this.activityStack.pop();
     const gameMap = mapManager.getLoadedMap(mapID);
 
     if(!gameMap) {
-        return false;
+        return;
     }
 
     for(const { layerID, tileX, tileY, oldID, newID } of actions) {
         gameMap.placeTile(oldID, layerID, tileX, tileY);
     }
-
-    return true;
 }
 
 MapEditor.prototype.swapFlag = function(gameContext, mapID, layerID) {
-    const { mapManager } = gameContext;
+    const { world } = gameContext;
+    const { mapManager } = world;
     const cursorTile = gameContext.getMouseTile();
     const gameMap = mapManager.getLoadedMap(mapID);
 
@@ -231,7 +228,8 @@ MapEditor.prototype.swapFlag = function(gameContext, mapID, layerID) {
 }
 
 MapEditor.prototype.paint = function(gameContext, mapID, layerID) {
-    const { mapManager } = gameContext;
+    const { world } = gameContext;
+    const { mapManager } = world;
     const cursorTile = gameContext.getMouseTile();
     const gameMap = mapManager.getLoadedMap(mapID);
     const brush = this.getBrush();
@@ -278,32 +276,50 @@ MapEditor.prototype.paint = function(gameContext, mapID, layerID) {
 }
 
 MapEditor.prototype.resizeMap = function(gameMap, width, height) {
-    const defaultSetup = this.config.defaultMapSetup;
-    const { layers } = defaultSetup;
+    const defaultSetup = this.config.defaultMapLayers;
+    const layers = gameMap.getLayers();
 
-    for(const layerID in gameMap.layers) {
-        const layerSetup = layers[layerID];
+    for(const layerID in layers) {
+        const layerSetup = defaultSetup[layerID];
+        const fill = layerSetup ? layerSetup.fill : 0;
 
-        if(layerSetup) {
-            const { fill } = layerSetup;
-            gameMap.resizeLayer(layerID, width, height, fill);
-            continue;
-        }
-
-        gameMap.resizeLayer(layerID, width, height, 0);
+        gameMap.resizeLayer(layerID, width, height, fill);
     }
 
-    gameMap.width = width;
-    gameMap.height = height;
+    gameMap.setWidth(width);
+    gameMap.setHeight(height);
+}
 
-    return true;
+MapEditor.prototype.incrementTypeIndex = function(gameContext, mapID, layerID, typeID) {
+    const { world } = gameContext;
+    const { mapManager } = world;
+    const worldMap = mapManager.getLoadedMap(mapID);
+
+    if(!worldMap) {
+        return;
+    }
+
+    const { x, y } = gameContext.getMouseTile();
+    const types = world.getConfig(typeID);
+    const tileTypeIDs = [];
+
+    for(const typeID of Object.keys(types)) {
+        const type = types[typeID];
+
+        tileTypeIDs.push(type.id);
+    }
+
+    const currentID = worldMap.getTile(layerID, x, y);
+    const currentIndex = tileTypeIDs.indexOf(currentID);
+    const nextIndex = loopValue(currentIndex + 1, tileTypeIDs.length - 1, 0);
+    const nextID = tileTypeIDs[nextIndex];
+
+    worldMap.placeTile(nextID, layerID, x, y);
 }
 
 MapEditor.prototype.getDefaultMapData = function() {
     return {
-        "data": this.config.defaultMapSetup,
-        "meta": this.config.defaultMapMeta,
-        "success": true,
-        "code": "DEFAULT"
+        "layers": this.config.defaultMapLayers,
+        "meta": this.config.defaultMapMeta
     }
 }
