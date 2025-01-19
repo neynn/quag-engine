@@ -5,10 +5,10 @@ import { SpriteManager } from "./graphics/spriteManager.js";
 import { UIManager } from "./ui/uiManager.js";
 import { StateMachine } from "./state/stateMachine.js";
 import { Timer } from "./timer.js";
-import { UIElement } from "./ui/uiElement.js";
 import { TileManager } from "./tile/tileManager.js";
 import { Renderer } from "./renderer.js";
 import { World } from "./world.js";
+import { Button } from "./ui/elements/button.js";
 
 export const GameContext = function(fps = 60) {
     this.id = "GAME_CONTEXT";
@@ -22,15 +22,16 @@ export const GameContext = function(fps = 60) {
     this.world = new World();
     this.states = new StateMachine(this);
 
-    this.timer.inputFunction = (realTime, deltaTime) => {
-        this.client.update(this);
+    this.timer.input = (realTime, deltaTime) => {
+        this.client.update();
     }
 
-    this.timer.updateFunction = (gameTime, fixedDeltaTime) => {
+    this.timer.update = (gameTime, fixedDeltaTime) => {
+        this.states.update(this);
         this.world.update(this);
     }
 
-    this.timer.renderFunction = (realTime, deltaTime) => {
+    this.timer.render = (realTime, deltaTime) => {
         this.spriteManager.update(this);
         this.tileManager.update(this);
         this.uiManager.update(this);
@@ -47,7 +48,7 @@ GameContext.prototype.addClickEvent = function() {
         const clickedElements = this.uiManager.getCollidedElements(cursor.position.x, cursor.position.y, cursor.radius);
 
         for(const element of clickedElements) {
-            element.events.emit(UIElement.EVENT_CLICKED);
+            element.events.emit(Button.EVENT_CLICKED);
         }
     });
 }
@@ -60,26 +61,24 @@ GameContext.prototype.start = function() {
 GameContext.prototype.end = function() {
     this.world.actionQueue.end();
     this.world.entityManager.end();
-    this.spriteManager.end();
+    this.spriteManager.clear();
     this.tileManager.end();
     this.uiManager.end();
 }
-
-GameContext.prototype.onResourcesLoad = function(resources) {}
 
 GameContext.prototype.loadResources = function(resources) {
     this.client.musicPlayer.load(resources.music);
     this.client.soundPlayer.load(resources.sounds);
     this.client.socket.load(resources.settings.socket);
+    this.world.actionQueue.load(resources.actions);
     this.world.mapManager.load(resources.maps);
     this.world.controllerManager.load(resources.controllers);
     this.spriteManager.load(resources.sprites);
     this.tileManager.load(resources.tiles, resources.tileMeta);
     this.uiManager.load(resources.interfaces, resources.icons, resources.fonts);
-    this.world.entityManager.load(resources.entities, resources.components, resources.traits);
+    this.world.entityManager.load(resources.traits);
     this.settings = resources.settings;
     this.world.config = resources.world;
-    this.onResourcesLoad(resources);
 }
 
 GameContext.prototype.initialize = function() {}

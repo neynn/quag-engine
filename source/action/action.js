@@ -1,8 +1,8 @@
 export const Action = function() {}
 Action.prototype.onClear = function() {}
-Action.prototype.onStart = function(gameContext, request) {}
-Action.prototype.onEnd = function(gameContext, request) {}
-Action.prototype.onUpdate = function(gameContext, request) {}
-Action.prototype.isFinished = function(gameContext, request) {}
-Action.prototype.isValid = function(gameContext, request, messengerID) {}
-Action.prototype.createRequest = function(...args) {}
+Action.prototype.onStart = function(gameContext, data, messengerID) {}
+Action.prototype.onEnd = function(gameContext, data, messengerID) {}
+Action.prototype.onUpdate = function(gameContext, data, messengerID) {}
+Action.prototype.isFinished = function(gameContext, data, messengerID) {}
+Action.prototype.getValidated = function(gameContext, template, messengerID) {}
+Action.prototype.getTemplate = function(...args) {}

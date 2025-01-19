@@ -4,6 +4,7 @@ import { UIElement } from "../uiElement.js";
 
 export const Container = function(id) {
     UIElement.call(this, id, "CONTAINER");
+    
     this.outline = new Outline();
     this.outline.setColor(255, 255, 255, 1);
     this.outline.enable();
@@ -37,7 +38,7 @@ Container.prototype.onDebug = function(context, viewportX, viewportY,localX, loc
 }
 
 Container.prototype.onDraw = function(context, viewportX, viewportY, localX, localY) {
-    if(this.outline.getActive()) {
+    if(this.outline.isActive()) {
         this.outline.apply(context);
     
         context.strokeRect(localX, localY, this.bounds.w, this.bounds.h);

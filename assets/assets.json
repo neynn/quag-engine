@@ -1,4 +1,5 @@
 {
+    "actions": { "id": "actions", "directory": "assets/config", "source": "actions.json" },
     "interfaces": { "id": "interfaces", "directory": "assets/config", "source": "interfaces.json" },
     "world": { "id": "world", "directory": "assets/config", "source": "world.json" },
     "settings": { "id": "settings", "directory": "assets/config", "source": "settings.json" },

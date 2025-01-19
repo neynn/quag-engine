@@ -1,101 +1,91 @@
-export const Queue = function() {
-    this.queue = [];
-    this.current = null;
-    this.isSkipping = false;
-    this.maxSize = 0;
-    this.state = Queue.STATE_IDLE;
+export const Queue = function(size = 0) {
+    this.size = size;
+    this.elements = [];
 }
 
-Queue.STATE_IDLE = 0;
-Queue.STATE_ACTIVE = 1;
-Queue.STATE_PROCESSING = 2;
-
-Queue.prototype.update = function(gameContext) {
-
-}
-
-Queue.prototype.clearQueue = function() {
-    this.queue.length = 0;
-}
-
-Queue.prototype.clearCurrent = function() {
-    this.current = null;
-}
-
-Queue.prototype.setMaxSize = function(maxSize) {
-    if(maxSize === undefined) {
-        return;
+Queue.prototype.getNext = function() {
+    if(this.elements.length === 0) {
+        return null;
     }
 
-    this.maxSize = maxSize;
+    const element = this.elements.shift();
+    const item = element.item;
+
+    return item;
 }
 
-Queue.prototype.getCurrent = function() {
-    return this.current;
-}
+Queue.prototype.filterAll = function(onCheck) {
+    for(let i = 0; i < this.elements.length; i++) {
+        const element = this.elements[i];
+        const { item } = element;
 
-Queue.prototype.next = function() {
-    if(this.queue.length === 0) {
-        this.current = null;
-    } else {
-        this.current = this.queue.shift();
+        onCheck(item);
     }
 
-    return this.current;
+    this.clear();
 }
 
-Queue.prototype.enqueue = function(item) {
-    if(this.queue.length >= this.maxSize) {
-        return;
+Queue.prototype.clearElements = function(indices) {
+    for(let i = indices.length - 1; i >= 0; i--) {
+        const index = indices[i];
+        this.elements.splice(index, 1);
+    }
+}
+
+Queue.prototype.filterUntilFirstHit = function(onCheck) {
+    const processedIndices = [];
+
+    for(let i = 0; i < this.elements.length; i++) {
+        const element = this.elements[i];
+        const { item } = element;
+        const isValid = onCheck(item);
+
+        processedIndices.push(i);
+
+        if(isValid) {
+            this.clearElements(processedIndices);
+            return true;
+        }
     }
 
-    if(!item) {
-        return;
+    this.clearElements(processedIndices);
+    return false;
+}
+
+Queue.prototype.setSize = function(size = 0) {
+    this.size = size;
+
+    if(this.elements.length > size) {
+        this.elements.length = size;
     }
-
-    this.queue.push({
-        "time": Date.now(),
-        "item": item
-    });
 }
 
-Queue.prototype.enqueuePriority = function(item) {
-    if(this.queue.length >= this.maxSize) {
-        return;
+Queue.prototype.enqueueLast = function(element) {
+    if(this.elements.length < this.size) {
+        this.elements.push({
+            "time": Date.now(),
+            "item": element 
+        });
     }
+}
 
-    if(!item) {
-        return;
+Queue.prototype.enqueueFirst = function(element) {
+    if(this.elements.length < this.size) {
+        this.elements.unshift({
+            "time": Date.now(),
+            "item": element 
+        });
     }
-
-    this.queue.unshift({
-        "time": Date.now(),
-        "item": item
-    });
 }
 
-Queue.prototype.isEmpty = function() {
-    return this.queue.length === 0;
+Queue.prototype.clear = function() {
+    this.elements = [];
 }
 
-Queue.prototype.isRunning = function() {
-    return this.queue.length !== 0 || this.current !== null;
+Queue.prototype.getSize = function() {
+    return this.elements.length;
 }
 
-Queue.prototype.toIdle = function() {
-    this.state = Queue.STATE_IDLE;
-}
-
-Queue.prototype.toActive = function() {
-    this.state = Queue.STATE_ACTIVE;
-}
-
-Queue.prototype.toProcessing = function() {
-    this.state = Queue.STATE_PROCESSING;
-}
-
-Queue.prototype.skip = function() {
-    if(this.isRunning()) {
-        this.isSkipping = true;
-    }
+Queue.prototype.isFull = function() {
+    return this.elements.length >= this.size;
 }

@@ -1,40 +1,46 @@
 export const Timer = function(timeStep) {
-    this.timeStep = 1/timeStep;
-    this.gameTime = 0;
+    this.FIXED_FRAMES_PER_SECOND = timeStep;
+    this.FIXED_SECONDS_PER_FRAME = 1 / timeStep;
+    this.tick = 0;
+    this.totalFixedTime = 0;
     this.accumulatedTime = 0;
     this.lastTime = 0;
     this.realTime = 0;
-    this.passedTime = 0;
+    this.deltaTime = 0;
 
-    this.updateProxy = (deltaTime) => {
-        this.realTime = deltaTime / 1000;
-        this.passedTime = this.realTime - this.lastTime;
+    this.updateProxy = (timestamp) => {
+        this.realTime = timestamp / 1000;
+        this.deltaTime = this.realTime - this.lastTime;
+        this.accumulatedTime += this.deltaTime;
+        
+        this.input(this.realTime, this.deltaTime);
     
-        this.inputFunction(this.realTime, this.passedTime);
-    
-        this.accumulatedTime += this.passedTime;
-    
-        while(this.accumulatedTime > this.timeStep) {
-            this.gameTime += this.timeStep;
-            this.updateFunction(this.gameTime, this.timeStep);
-            this.accumulatedTime -= this.timeStep;
+        while(this.accumulatedTime > this.FIXED_SECONDS_PER_FRAME) {
+            this.tick = (this.tick + 1) % this.FIXED_FRAMES_PER_SECOND;
+            this.totalFixedTime += this.FIXED_SECONDS_PER_FRAME;
+            this.update(this.totalFixedTime, this.FIXED_SECONDS_PER_FRAME);
+            this.accumulatedTime -= this.FIXED_SECONDS_PER_FRAME;
         }
     
-        this.renderFunction(this.realTime, this.passedTime);
+        this.render(this.realTime, this.deltaTime);
     
         this.lastTime = this.realTime;
         this.queue();
     }
 }
 
-Timer.prototype.inputFunction = function(realTime, deltaTime) {}
+Timer.prototype.input = function(realTime, deltaTime) {}
 
-Timer.prototype.updateFunction = function(gameTime, fixedDeltaTime) {}
+Timer.prototype.update = function(gameTime, fixedDeltaTime) {}
 
-Timer.prototype.renderFunction = function(realTime, deltaTime) {}
+Timer.prototype.render = function(realTime, deltaTime) {}
 
 Timer.prototype.queue = function() {
     requestAnimationFrame(this.updateProxy);
+}
+
+Timer.prototype.getTick = function() {
+    return this.tick;
 }
 
 Timer.prototype.start = function() {
@@ -46,9 +52,9 @@ Timer.prototype.getRealTime = function() {
 }
 
 Timer.prototype.getFixedDeltaTime = function() {
-    return this.timeStep;
+    return this.FIXED_SECONDS_PER_FRAME;
 }
 
 Timer.prototype.getDeltaTime = function() {
-    return this.passedTime;
+    return this.deltaTime;
 }

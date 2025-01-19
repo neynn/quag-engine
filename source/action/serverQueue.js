@@ -1,50 +1,29 @@
-import { Queue } from "../queue.js";
 import { RequestQueue } from "./requestQueue.js";
 
-/**
- * The ServerQueue updates when a valid request arrives.
- * This removes the need for constant updates.
- */
 export const ServerQueue = function() {
     RequestQueue.call(this);
+
+    this.setMode(RequestQueue.MODE.DIRECT);
+    this.setState(RequestQueue.STATE.FLUSH);
 }
 
 ServerQueue.prototype = Object.create(RequestQueue.prototype);
 ServerQueue.prototype.constructor = ServerQueue;
 
-ServerQueue.prototype.processRequest = function(gameContext, request, messengerID) {
-    const isValid = this.validateRequest(gameContext, request, messengerID, RequestQueue.PRIORITY_NORMAL);
+ServerQueue.prototype.processUserRequest = function(gameContext, request, messengerID) {
+    const element = this.createElement(request, RequestQueue.PRIORITY.LOW, messengerID);
+    this.processElement(gameContext, element);
+}
+
+ServerQueue.prototype.processElement = function(gameContext, element) {
+    const isValid = this.validateExecution(gameContext, element);
 
     if(isValid) {
-        this.enqueue(request);
-        this.update(this);
+        this.update(gameContext);
     }
 }
 
-ServerQueue.prototype.update = function(gameContext) {
-    if(this.state !== Queue.STATE_ACTIVE || this.isEmpty()) {
-        return;
-    }
-
-    this.toProcessing();
-
-    const next = this.next();
-
-    if(next) {
-        const { item } = next;
-        const { type } = item;
-        const actionType = this.requestHandlers[type];
-
-        this.events.emit(RequestQueue.EVENT_REQUEST_RUN, next);
-        this.clearCurrent();
-        
-        actionType.onStart(gameContext, item);
-        actionType.onEnd(gameContext, item);
-        actionType.onClear();
-    }
-
-    this.toActive();
-
+ServerQueue.prototype.onUpdate = function(gameContext) {
     if(!this.isEmpty()) {
         this.update(gameContext);
     }
