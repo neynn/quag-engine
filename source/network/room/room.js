@@ -59,7 +59,7 @@ Room.prototype.removeMember = function(clientID) {
     return true;
 }
 
-Room.prototype.initialize = async function() {
+Room.prototype.init = async function() {
 
 }
 
@@ -136,6 +136,6 @@ Room.prototype.start = function() {
     this.isStarted = true;
 }
 
-Room.prototype.end = function() {
+Room.prototype.exit = function() {
     this.isStarted = false;
 }

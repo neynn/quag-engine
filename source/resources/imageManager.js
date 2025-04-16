@@ -1,4 +1,6 @@
-import { Sheet } from "./sheet.js";
+import { Logger } from "../logger.js";
+import { LoadableImage } from "./loadableImage.js";
+import { PathHandler } from "./pathHandler.js";
 
 export const ImageManager = function() {
     this.images = new Map();
@@ -8,49 +10,38 @@ ImageManager.SIZE_MB = 1048576;
 ImageManager.SIZE_BIG_IMAGE = 2048 * 2048 * 4;
 ImageManager.DEFAULT_IMAGE_TYPE = ".png";
 
-ImageManager.prototype.getPath = function(directory, source) {
-    const path = `${directory}/${source}`;
-
-    return path;
-}
-
-ImageManager.prototype.addImage = function(id, image) {
-    if(this.images.has(id)) {
-        return false;
-    }
-
-    const sheet = new Sheet(id, image);
-
-    this.images.set(id, sheet);
-
-    return true;
-}
-
-ImageManager.prototype.promiseHTMLImage = function(path) {
-    const promise = new Promise((resolve, reject) => {
-        const image = new Image();
-
-        image.onload = () => resolve(image);
-        image.onerror = () => reject(image);
-        image.src = path;
-    }); 
-
-    return promise;
-}
-
-ImageManager.prototype.loadImages = function(imageMeta, onLoad, onError) {
+ImageManager.prototype.createImages = function(imageMeta) {
     for(const imageID in imageMeta) {
         const imageConfig = imageMeta[imageID];
         const { directory, source } = imageConfig;
         const fileName = source ? source : `${imageID}${ImageManager.DEFAULT_IMAGE_TYPE}`;
-        const imagePath = this.getPath(directory, fileName);
+        const imagePath = PathHandler.getPath(directory, fileName);
 
-        this.promiseHTMLImage(imagePath)
-        .then(image => {
-            this.addImage(imageID, image);
-            onLoad(imageID, image);
-        })
-        .catch(error => onError(imageID, error));
+        if(!this.images.has(imageID)) {
+            const loadableImage = new LoadableImage(imagePath);
+
+            this.images.set(imageID, loadableImage);
+        }
+    }
+}
+
+ImageManager.prototype.requestImage = function(imageID, onLoad) {
+    const loadableImage = this.images.get(imageID);
+
+    if(!loadableImage) {
+        return;
+    }
+
+    loadableImage.requestImage()
+    .then((image) => onLoad(imageID, image, loadableImage))
+    .catch((code) => Logger.log(Logger.CODE.ENGINE_WARN, "Image could not be loaded!", "ImageManager.prototype.requestImage", { imageID, "error": code }));
+}
+
+ImageManager.prototype.requestAllImages = function(onLoad) {
+    for(const [imageID, loadableImage] of this.images) {
+        loadableImage.requestImage()
+        .then((image) => onLoad(imageID, image, loadableImage))
+        .catch((code) => Logger.log(Logger.CODE.ENGINE_WARN, "Image could not be loaded!", "ImageManager.prototype.requestImage", { imageID, "error": code }));
     }
 }
 

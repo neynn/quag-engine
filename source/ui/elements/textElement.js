@@ -1,9 +1,9 @@
 import { TextStyle } from "../../graphics/applyable/textStyle.js";
 import { UIElement } from "../uiElement.js";
 
-export const TextElement = function(id) {
-    UIElement.call(this, id, "TextElement");
-
+export const TextElement = function(DEBUG_NAME) {
+    UIElement.call(this, DEBUG_NAME);
+    
     this.style = new TextStyle();
     this.fullText = "";
     this.revealedText = "";
@@ -15,19 +15,6 @@ export const TextElement = function(id) {
 
 TextElement.prototype = Object.create(UIElement.prototype);
 TextElement.prototype.constructor = TextElement;
-
-TextElement.prototype.loadFromConfig = function(config) {
-    const { id, opacity, position, font, align, color = [0, 0, 0, 0], text } = config;
-    const { x, y } = position;
-
-    this.DEBUG_NAME = id;
-    this.setText(text);
-    this.setOpacity(opacity);
-    this.setPosition(x, y);
-    this.style.setFont(font);
-    this.style.setAlignment(align);
-    this.style.setColorArray(color);
-}
 
 TextElement.prototype.setRevealSpeed = function(revealSpeed) {
     if(revealSpeed !== undefined) {
@@ -70,10 +57,9 @@ TextElement.prototype.isCompleted = function() {
     return this.fullText.length === this.revealedText.length;
 }
 
-TextElement.prototype.onDraw = function(context, viewportX, viewportY, localX, localY) {
+TextElement.prototype.onDraw = function(context, localX, localY) {
     this.style.apply(context);
 
-    context.globalAlpha = this.opacity;
     context.fillText(this.revealedText, localX, localY);
 }
 

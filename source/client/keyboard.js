@@ -1,68 +1,76 @@
 import { EventEmitter } from "../events/eventEmitter.js";
 
 export const Keyboard = function() {
-    this.keys = new Set();
+    this.reservedKeys = new Set();
     this.activeKeys = new Set();
 
-    this.addEventHandler("keydown", (event) => this.eventKeyPress(event.key));
-    this.addEventHandler("keyup", (event) => this.eventKeyRelease(event.key));
-
     this.events = new EventEmitter();
-    this.events.listen(Keyboard.KEY_PRESSED);
-    this.events.listen(Keyboard.KEY_RELEASED);
-    this.events.listen(Keyboard.KEY_DOWN);
+    this.events.listen(Keyboard.EVENT.KEY_PRESSED);
+    this.events.listen(Keyboard.EVENT.KEY_RELEASED);
+    this.events.listen(Keyboard.EVENT.KEY_DOWN);
+    this.events.listen(Keyboard.EVENT.KEY_BOUND);
+    this.events.listen(Keyboard.EVENT.KEY_UNBOUND);
 
-    this.keys.add("w");
-    this.keys.add("a");
-    this.keys.add("s");
-    this.keys.add("d");
-    this.keys.add("b");
-    this.keys.add("e");
-    this.keys.add(" ");
-    this.keys.add("Shift");
-}
+    document.addEventListener("keydown", (event) => {
+        const { key } = event;
 
-Keyboard.KEY_PRESSED = 0;
-Keyboard.KEY_RELEASED = 1;
-Keyboard.KEY_DOWN = 2;
-
-Keyboard.prototype.eventKeyPress = function(key) {
-    if(!this.activeKeys.has(key)) {
-        this.activeKeys.add(key);
-        this.events.emit(Keyboard.KEY_PRESSED, key, this);
-    }
-}
-
-Keyboard.prototype.eventKeyRelease = function(key) {
-    if(this.activeKeys.has(key)) {
-        this.activeKeys.delete(key);
-        this.events.emit(Keyboard.KEY_RELEASED, key, this);
-    }
-}
-
-Keyboard.prototype.addEventHandler = function(type, onEvent) {
-    document.addEventListener(type, (event) => {
-        if(this.keys.has(event.key)) {
+        if(this.reservedKeys.has(key)) {
             event.preventDefault();
-            onEvent(event);
+            this.onKeyDown(event.key);
+        }
+    });
+
+    document.addEventListener("keyup", (event) => {
+        const { key } = event;
+
+        if(this.reservedKeys.has(key)) {
+            event.preventDefault();
+            this.onKeyUp(event.key);
         }
     });
 }
 
-Keyboard.prototype.addEvent = function(eventID, keyID, onCall) {
-    if(!this.keys.has(keyID)) {
+Keyboard.EVENT = {
+    KEY_PRESSED: "KEY_PRESSED",
+    KEY_RELEASED: "KEY_RELEASED",
+    KEY_DOWN: "KEY_DOWN",
+    KEY_BOUND: "KEY_BOUND",
+    KEY_UNBOUND: "KEY_UNBOUND"
+};
+
+Keyboard.prototype.onKeyDown = function(keyID) {
+    if(!this.activeKeys.has(keyID)) {
+        this.activeKeys.add(keyID);
+        this.events.emit(Keyboard.EVENT.KEY_PRESSED, keyID);
+    }
+}
+
+Keyboard.prototype.onKeyUp = function(keyID) {
+    if(this.activeKeys.has(keyID)) {
+        this.activeKeys.delete(keyID);
+        this.events.emit(Keyboard.EVENT.KEY_RELEASED, keyID);
+    }
+}
+
+Keyboard.prototype.reserve = function(keyID) {
+    if(this.reservedKeys.has(keyID)) {
         return;
     }
 
-    this.events.subscribe(eventID, keyID, (key, keyboard) => {
-        if(key === keyID) {
-            onCall(key, keyboard);
-        }
-    });
+    this.reservedKeys.add(keyID);
+    this.events.emit(Keyboard.EVENT.KEY_BOUND, keyID);
+}
+
+Keyboard.prototype.free = function(keyID) {
+    if(!this.reservedKeys.has(keyID)) {
+        return;
+    }
+
+    this.reservedKeys.delete(keyID);
 }
 
 Keyboard.prototype.update = function() {
-    for(const key of this.activeKeys) {
-        this.events.emit(Keyboard.KEY_DOWN, key, this);
+    for(const keyID of this.activeKeys) {
+        this.events.emit(Keyboard.EVENT.KEY_DOWN, keyID);
     }
 }

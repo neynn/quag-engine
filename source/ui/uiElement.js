@@ -1,64 +1,174 @@
-import { Drawable } from "../graphics/drawable.js";
+import { Graph } from "../graphics/graph.js";
 
-export const UIElement = function(id, DEBUG_NAME) {
-    Drawable.call(this, id, DEBUG_NAME);
-    
-    this.events.listen(UIElement.EVENT_FIRST_COLLISION);
-    this.events.listen(UIElement.EVENT_FINAL_COLLISION);
-    this.events.listen(UIElement.EVENT_COLLISION);
+export const UIElement = function(DEBUG_NAME) {
+    Graph.call(this, Graph.TYPE.UI_ELEMENT, DEBUG_NAME);
+
+    this.anchor = UIElement.ANCHOR_TYPE.TOP_LEFT;
+    this.behavior = 0;
+    this.originX = 0;
+    this.originY = 0;
+    this.width = 0;
+    this.height = 0;
 }
 
-UIElement.EVENT_FINAL_COLLISION = "EVENT_FINAL_COLLISION";
-UIElement.EVENT_FIRST_COLLISION = "EVENT_FIRST_COLLISION";
-UIElement.EVENT_COLLISION = "EVENT_COLLISION";
+UIElement.BEHAVIOR = {
+    NONE: 0,
+    COLLIDEABLE: 1 << 0,
+    CLICKABLE: 1 << 1
+};
 
-UIElement.prototype = Object.create(Drawable.prototype);
+UIElement.COLLISION_TYPE = {
+    FIRST: 0,
+    LAST: 1,
+    REPEATED: 2
+};
+
+UIElement.EVENT = {
+    LAST_COLLISION: "LAST_COLLISION",
+    FIRST_COLLISION: "FIRST_COLLISION",
+    REPEATED_COLLISION: "REPEATED_COLLISION",
+    CLICKED: "CLICKED"
+};
+
+UIElement.ANCHOR_TYPE = {
+    TOP_CENTER: 0,
+    TOP_LEFT: 1,
+    TOP_RIGHT: 2,
+    BOTTOM_CENTER: 3,
+    BOTTOM_LEFT: 4,
+    BOTTOM_RIGHT: 5,
+    CENTER: 6,
+    LEFT: 7,
+    RIGHT: 8
+};
+
+UIElement.prototype = Object.create(Graph.prototype);
 UIElement.prototype.constructor = UIElement;
 
-UIElement.prototype.loadFromConfig = function(config) {
-    console.warn(`Method loadFromConfig has not been defined!`);
+UIElement.prototype.removeBehavior = function(flag) {
+    this.behavior &= (~flag);
 }
 
-UIElement.prototype.isColliding = function(mouseX, mouseY, mouseRange) {
-    return false;
+UIElement.prototype.hasBehavior = function(flag) {
+    return (this.behavior & flag) !== 0;
+}
+
+UIElement.prototype.addBehavior = function(flag) {
+    this.behavior |= flag;
+}
+
+UIElement.prototype.setSize = function(width, height) {
+    this.width = width;
+    this.height = height;
+} 
+
+UIElement.prototype.setOrigin = function(originX, originY) {
+    this.originX = originX;
+    this.originY = originY;
+}
+
+UIElement.prototype.setAnchor = function(anchor) {
+    if(UIElement.ANCHOR_TYPE[anchor] !== undefined) {
+        this.anchor = UIElement.ANCHOR_TYPE[anchor];
+    }
 }
 
 UIElement.prototype.getCollisions = function(mouseX, mouseY, mouseRange) {
-    const collidedElements = [];
-    const uncheckedElements = [];
+    if(!this.hasBehavior(UIElement.BEHAVIOR.COLLIDEABLE)) {
+        return [];
+    }
 
-    uncheckedElements.push({
-        "element": this,
-        "localX": mouseX,
-        "localY": mouseY
-    });
+    const stack = [this];
+    const positions = [mouseX, mouseY];
+    const collisions = [];
 
-    while(uncheckedElements.length > 0) {
-        const { element, localX, localY } = uncheckedElements.pop();
-        const isColliding = element.isColliding(localX, localY, mouseRange);
+    while(stack.length !== 0) {
+        const positionY = positions.pop();
+        const positionX = positions.pop();
+        const graph = stack.pop();
+        const isColliding = graph.isColliding(positionX, positionY, mouseRange);
 
         if(!isColliding) {
             continue;
         }
 
-        collidedElements.push(element);
+        const nextX = positionX - graph.positionX;
+        const nextY = positionY - graph.positionY;
+        const children = graph.children;
 
-        const children = element.getChildren();
-        const nextLocalX = localX - element.position.x;
-        const nextLocalY = localY - element.position.y;
-
-        for(const child of children) {
-            const reference = child.getReference();
+        for(let i = 0; i < children.length; i++) {
+            const child = children[i];
             
-            if(reference instanceof UIElement) {
-                uncheckedElements.push({
-                    "element": reference,
-                    "localX": nextLocalX,
-                    "localY": nextLocalY
-                });
+            if(child.type === Graph.TYPE.UI_ELEMENT) {
+                const hasFlag = child.hasBehavior(UIElement.BEHAVIOR.COLLIDEABLE);
+
+                if(hasFlag) {
+                    stack.push(child);
+                    positions.push(nextX);
+                    positions.push(nextY);
+                }
             }
         }
+
+        collisions.push(graph);
     }
 
-    return collidedElements;
+    return collisions;
+}
+
+UIElement.prototype.updateAnchor = function(windowWidth, windowHeight) {    
+    switch(this.anchor) {
+        case UIElement.ANCHOR_TYPE.TOP_CENTER: {
+            const anchorX = windowWidth / 2 - this.originX - this.width / 2;
+
+            this.setPosition(anchorX, this.originY);
+            break;
+        }
+        case UIElement.ANCHOR_TYPE.TOP_RIGHT: {
+            const anchorX = windowWidth - this.originX - this.width;
+
+            this.setPosition(anchorX, this.originY);
+            break;
+        }
+        case UIElement.ANCHOR_TYPE.BOTTOM_LEFT: {
+            const anchorY = windowHeight - this.originY - this.height;
+
+            this.setPosition(this.originX, anchorY);
+            break;
+        }
+        case UIElement.ANCHOR_TYPE.BOTTOM_CENTER: {
+            const anchorX = windowWidth / 2 - this.originX - this.width / 2;
+            const anchorY = windowHeight - this.originY - this.height;
+
+            this.setPosition(anchorX, anchorY);
+            break;
+        }
+        case UIElement.ANCHOR_TYPE.BOTTOM_RIGHT: {
+            const anchorX = windowWidth - this.originX - this.width;
+            const anchorY = windowHeight - this.originY - this.height;
+
+            this.setPosition(anchorX, anchorY);
+            break;
+        }
+        case UIElement.ANCHOR_TYPE.LEFT: {
+            const anchorY = windowHeight / 2 - this.originY - this.height / 2;
+
+            this.setPosition(this.originX, anchorY);
+            break;
+        }
+        case UIElement.ANCHOR_TYPE.CENTER: {
+            const anchorX = windowWidth / 2 - this.originX - this.width / 2;
+            const anchorY = windowHeight / 2 - this.originY - this.height / 2;
+
+            this.setPosition(anchorX, anchorY);
+            break;
+        }
+        case UIElement.ANCHOR_TYPE.RIGHT: {
+            const anchorX = windowWidth - this.originX - this.width;
+            const anchorY = windowHeight / 2 - this.originY - this.height / 2;
+
+            this.setPosition(anchorX, anchorY);
+            break;
+        }
+    }
 }

@@ -1,8 +1,7 @@
 {
     "FPS_COUNTER": {
         "TEXT_FPS": {
-            "id": "TEXT_FPS",
-            "type": "DYNAMIC_TEXT",
+            "type": "TEXT",
             "anchor": "BOTTOM_LEFT",
             "position": { "x": 0, "y": 25 },
             "text": "FPS",

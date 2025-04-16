@@ -1,8 +1,22 @@
+import { ActiveComponent } from "../component/activeComponent.js";
+
 export const Entity = function(DEBUG_NAME = "") {
     this.DEBUG_NAME = DEBUG_NAME;
     this.id = null;
+    this.ownerID = null;
     this.config = {};
     this.components = new Map();
+    this.activeComponents = [];
+}
+
+Entity.prototype.getOwner = function() {
+    return this.ownerID;
+}
+
+Entity.prototype.setOwner = function(ownerID) {
+    if(ownerID !== undefined) {
+        this.ownerID = ownerID;
+    }
 }
 
 Entity.prototype.setID = function(id) {
@@ -25,61 +39,71 @@ Entity.prototype.getConfig = function() {
     return this.config;
 }
 
-Entity.prototype.update = function(gameContext) {}
+Entity.prototype.update = function(gameContext) {
+    for(let i = 0; i < this.activeComponents.length; i++) {
+        const componentID = this.activeComponents[i];
+        const component = this.components.get(componentID);
 
-Entity.prototype.loadComponent = function(type, data = {}) {
-    if(!this.hasComponent(type)) {
-        this.addComponent(new type());
-    }
-
-    const component = this.components.get(type);
-
-    for(const field in data) {
-        const value = data[field];
-
-        if(component[field] !== undefined) {
-            component[field] = value;
-        }
+        component.update(gameContext, this);
     }
 }
 
-Entity.prototype.saveComponent = function(type) {
-    const component = this.components.get(type);
+Entity.prototype.save = function() {
+    const blob = {};
 
-    if(!component) {
-        return null;
+    for(const [componentID, component] of this.components) {
+        const data = component.save();
+
+        if(data) {
+            blob[componentID] = data;
+        }
     }
 
-    if(typeof component.save === "function") {
-        return component.save();
+    return blob;
+}
+
+Entity.prototype.loadComponent = function(componentID, blob) {
+    const component = this.components.get(componentID);
+
+    if(component) {
+        component.load(blob);
     }
-
-    const entries = Object.entries(component);
-    const componentData = {};
-
-    for(const [field, value] of entries) {
-        componentData[field] = value;
-    }
-
-    return componentData;
 }
 
 Entity.prototype.hasComponent = function(component) {
     return this.components.has(component);
 }
 
-Entity.prototype.addComponent = function(component) {
-    if(!this.components.has(component.constructor)) {
-        this.components.set(component.constructor, component);
+Entity.prototype.addComponent = function(componentID, component) {
+    if(this.components.has(componentID)) {
+        return;
+    }
+
+    this.components.set(componentID, component);
+
+    if(component instanceof ActiveComponent) {
+        this.activeComponents.push(componentID);
     }
 }
 
-Entity.prototype.getComponent = function(component) {
-    return this.components.get(component);
+Entity.prototype.getComponent = function(componentID) {
+    return this.components.get(componentID);
 }
 
-Entity.prototype.removeComponent = function(component) {
-    if(this.components.has(component)) {
-        this.components.delete(component);
+Entity.prototype.removeComponent = function(componentID) {
+    if(!this.components.has(componentID)) {
+        return;
+    }
+
+    this.components.delete(componentID);
+
+    for(let i = 0; i < this.activeComponents.length; i++) {
+        const activeComponentID = this.activeComponents[i];
+
+        if(componentID === activeComponentID) {
+            this.activeComponents[i] = this.activeComponents[this.activeComponents.length - 1];
+            this.activeComponents.pop();
+            return;
+        }
     }
 }

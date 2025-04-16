@@ -1,110 +1,182 @@
-import { Vec2 } from "../math/vec2.js";
+import { lerpValue } from "../math/math.js";
 
-export const Camera = function() {
-    this.position = new Vec2(0, 0);
+export const Camera = function() {    
+    this.viewportX = 0;
+    this.viewportY = 0;
+    this.viewportX_limit = 0;
+    this.viewportY_limit = 0;
     this.viewportWidth = 0;
     this.viewportHeight = 0;
-    this.viewportMode = Camera.VIEWPORT_MODE.FILL_WINDOW_AUTO;
-    this.scale = 1;
+
+    this.worldWidth = 0;
+    this.worldHeight = 0;
+
+    this.viewportMode = Camera.VIEWPORT_MODE.DRAG;
+    this.viewportType = Camera.VIEWPORT_TYPE.BOUND;
 }
 
-/**
- * VIEWPORT_MODE.FILL_WINDOW_AUTO
- *  - Camera spans entire window.
- *  - Camera automatically centers on world screen.
- * 
- * VIEWPORT_MODE.FILL_WINDOW_FIXED
- *  - Camera spans entire window.
- *  - Camera is fixed on 0, 0.
- */
-Camera.VIEWPORT_MODE = {
-    FILL_WINDOW_AUTO: 0,
-    FILL_WINDOW_FIXED: 1
+Camera.VIEWPORT_TYPE = {
+    FREE: 0,
+    BOUND: 1
 };
 
-Camera.prototype.setMode = function(modeID = Camera.VIEWPORT_MODE.FILL_WINDOW_AUTO) {
-    this.viewportMode = modeID;
+Camera.VIEWPORT_MODE = {
+    FIXED: 0,
+    FOLLOW: 1,
+    DRAG: 2
+};
+
+Camera.prototype.update = function(gameContext, renderContext) {}
+
+Camera.prototype.loadWorld = function(worldWidth, worldHeight) {
+    this.worldWidth = worldWidth;
+    this.worldHeight = worldHeight;
 }
 
-Camera.prototype.getMode = function() {
-    return this.viewportMode;
+Camera.prototype.centerWorld = function() {
+    const positionX = this.worldWidth / 2;
+    const positionY = this.worldHeight / 2;
+
+    this.centerViewport(positionX, positionY);
 }
 
-Camera.prototype.setViewport = function(viewportWidth = 0, viewportHeight = 0) {
-    this.viewportWidth = viewportWidth;
-    this.viewportHeight = viewportHeight;
+Camera.prototype.reloadViewport = function() {
+    if(this.worldWidth <= this.viewportWidth) {
+        this.viewportX_limit = 0;
+    } else {
+        this.viewportX_limit = this.worldWidth - this.viewportWidth;
+    }
+
+    if(this.worldHeight <= this.viewportHeight) {
+        this.viewportY_limit = 0;
+    } else {
+        this.viewportY_limit = this.worldHeight - this.viewportHeight;
+    }
+
+    this.limitViewport();
 }
 
-Camera.prototype.getBounds = function() {
+Camera.prototype.alignViewport = function() {
+    if(this.worldWidth < this.viewportWidth) {
+        this.viewportWidth = this.worldWidth;
+    }
+
+    if(this.worldHeight < this.viewportHeight) {
+        this.viewportHeight = this.worldHeight;
+    }
+}
+
+Camera.prototype.limitViewport = function() {
+    if(this.viewportType !== Camera.VIEWPORT_TYPE.BOUND) {
+        return;
+    }
+
+    if(this.viewportX < 0) {
+        this.viewportX = 0;
+    } else if(this.viewportX >= this.viewportX_limit) {
+        this.viewportX = this.viewportX_limit;
+    }
+  
+    if(this.viewportY < 0) {
+        this.viewportY = 0;
+    } else if(this.viewportY >= this.viewportY_limit) {
+        this.viewportY = this.viewportY_limit;
+    }
+}
+
+Camera.prototype.moveViewport = function(viewportX, viewportY) {
+    if(this.viewportMode === Camera.VIEWPORT_MODE.FIXED) {
+        return;
+    }
+
+    this.viewportX = Math.trunc(viewportX);
+    this.viewportY = Math.trunc(viewportY);
+
+    this.limitViewport();
+}
+
+Camera.prototype.setViewport = function(width, height) {
+    this.viewportWidth = width;
+    this.viewportHeight = height;
+}
+
+Camera.prototype.dragViewport = function(dragX, dragY) {
+    if(this.viewportMode !== Camera.VIEWPORT_MODE.DRAG) {
+        return;
+    }
+
+    const positionX = this.viewportX + dragX;
+    const positionY = this.viewportY + dragY;
+    
+    this.moveViewport(positionX, positionY);
+}
+
+Camera.prototype.centerViewport = function(positionX, positionY) {
+    const viewportX = positionX - this.viewportWidth / 2;
+    const viewportY = positionY - this.viewportHeight / 2;
+
+    this.moveViewport(viewportX, viewportY);
+}
+
+Camera.prototype.bindViewport = function() {
+    this.viewportType = Camera.VIEWPORT_TYPE.BOUND;
+    this.limitViewport();
+}
+
+Camera.prototype.unbindViewport = function() {
+    this.viewportType = Camera.VIEWPORT_TYPE.FREE;
+    this.limitViewport();
+}
+
+Camera.prototype.getViewport = function() {
     return {
-        "x": this.position.x,
-        "y": this.position.y,
+        "x": this.viewportX,
+        "y": this.viewportY,
         "w": this.viewportWidth,
         "h": this.viewportHeight
     }
 }
 
-Camera.prototype.centerInWindow = function(windowWidth, windowHeight) {
-    const offsetX = (windowWidth - this.viewportWidth) / 2;
-    const offsetY = (windowHeight - this.viewportHeight) / 2;
-
-    this.setPosition(offsetX, offsetY);
-}
-
-Camera.prototype.setPosition = function(x = 0, y = 0) {
-    switch(this.viewportMode) {
-        case Camera.VIEWPORT_MODE.FILL_WINDOW_AUTO: {
-            this.position.x = Math.floor(x);
-            this.position.y = Math.floor(y);
-            break;
-        }
-        case Camera.VIEWPORT_MODE.FILL_WINDOW_FIXED: {
-            this.position.x = 0;
-            this.position.y = 0;
-            break;
-        }
-        default: {
-            //TODO
-            break;
-        }
-    }
-}
-
-Camera.prototype.getPosition = function() {
-    return this.position;
-}
-
-Camera.prototype.getViewportWidth = function() {
-    return this.viewportWidth / this.scale;
-}
-
-Camera.prototype.getViewportHeight = function() {
-    return this.viewportHeight / this.scale;
-}
-
-Camera.prototype.onWindowResize = function(width, height) {
-    switch(this.viewportMode) {
-        case Camera.VIEWPORT_MODE.FILL_WINDOW_AUTO: {
-            this.setViewport(width, height);
-            this.cutViewport(width, height);
-            this.centerInWindow(width, height);
-            break;
-        }
-        case Camera.VIEWPORT_MODE.FILL_WINDOW_FIXED: {
-            this.setViewport(width, height);
-            break;
-        }
-        default: {
-            //TODO
-            break;
-        }
+Camera.prototype.addTarget = function(targetX = 0, targetY = 0, factor = 0) {
+    if(this.viewportMode !== Camera.VIEWPORT_MODE.FOLLOW) {
+        return;
     }
 
-    this.reloadViewport();
+    this.targets.push([targetX, targetY, factor]);
 }
 
-Camera.prototype.reloadViewport = function() {} 
+Camera.prototype.followTargets = function(deltaTime) {
+    if(this.viewportMode !== Camera.VIEWPORT_MODE.FOLLOW || this.targets.length === 0) {
+        return;
+    }
 
-Camera.prototype.cutViewport = function(windowWidth, windowHeight) {}
+    const threshold = 10;
+    const [positionX, positionY, factor] = this.targets[0];
+    const smoothingFactor = factor * deltaTime;
 
-Camera.prototype.update = function(gameContext) {}
+    const targetX = positionX - this.viewportWidth / 2;
+    const targetY = positionY - this.viewportHeight / 2;
+
+    const distanceX = targetX - this.viewportX;
+    const distanceY = targetY - this.viewportY;
+
+    if(Math.abs(distanceX) < threshold && Math.abs(distanceY) < threshold) {
+        this.moveViewport(targetX, targetY);
+        this.targets.shift();
+        
+        if(this.targets.length === 0) {
+            //TODO: When all targets are reached: emit an "ALL_TARGETS_REACHED" event
+            //THEN: Allow draggin again?
+        }
+
+        return;
+    }
+
+    if(smoothingFactor !== 0) {
+        const viewportX = lerpValue(this.viewportX, targetX, smoothingFactor);
+        const viewportY = lerpValue(this.viewportY, targetY, smoothingFactor);
+        this.moveViewport(viewportX, viewportY);
+    } else {
+        this.moveViewport(targetX, targetY);
+    }
+}

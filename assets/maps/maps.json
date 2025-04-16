@@ -1,10 +1,6 @@
 {
-    "MAP_ID": { 
-        "id": "MAP_ID",
-        "directory": "assets/maps",
-        "source": "MAP_CONFIG",
-        "music": null,
-        "entities": [],
-        "flags": {}
+    "example_map": { 
+        "directory": ["assets", "maps"],
+        "source": "example_map.json"
     }
 }

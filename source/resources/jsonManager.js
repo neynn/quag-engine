@@ -1,22 +1,24 @@
+import { PathHandler } from "./pathHandler.js";
+
 export const JSONManager = function() {
     this.files = new Map();
+    this.cacheEnabled = false;
 }
 
-JSONManager.FILE_CACHE_ENABLED = 1;
+JSONManager.prototype.enableCache = function() {
+    this.cacheEnabled = true;
+}
 
-JSONManager.prototype.getPath = function(directory, source) {
-    const path = `${directory}/${source}`;
-    return path;
+JSONManager.prototype.disableCache = function() {
+    this.cacheEnabled = false;
 }
 
 JSONManager.prototype.promiseJSON = function(path) {
     return fetch(path).then(response => response.json()).catch(error => null);
 }
 
-JSONManager.prototype.loadFileData = async function(meta) {
-    const { id, directory, source } = meta;
-
-    if(JSONManager.FILE_CACHE_ENABLED) {
+JSONManager.prototype.loadFileData = async function(id, directory, source) {
+    if(this.cacheEnabled) {
         const cachedMap = this.files.get(id);
 
         if(cachedMap) {
@@ -24,14 +26,14 @@ JSONManager.prototype.loadFileData = async function(meta) {
         }
     }
 
-    const filePath = this.getPath(directory, source);
+    const filePath = PathHandler.getPath(directory, source);
     const fileData = await this.promiseJSON(filePath);
 
     if(!fileData) {
         return null;
     }
 
-    if(JSONManager.FILE_CACHE_ENABLED) {
+    if(this.cacheEnabled) {
         this.files.set(id, fileData);
     }
 

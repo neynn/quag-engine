@@ -1,131 +1,77 @@
-import { createFadeInEffect } from "../effects/example/fadeIn.js";
-import { createFadeOutEffect } from "../effects/example/fadeOut.js";
 import { Logger } from "../logger.js";
-import { Renderer } from "../renderer.js";
 import { ImageManager } from "../resources/imageManager.js";
+import { UserInterface } from "./userInterface.js";
+import { UIElement } from "./uiElement.js";
+import { TextStyle } from "../graphics/applyable/textStyle.js";
 import { Button } from "./elements/button.js";
 import { Container } from "./elements/container.js";
-import { DynamicTextElement } from "./elements/dynamicTextElement.js";
 import { Icon } from "./elements/icon.js";
+import { Scrollbar } from "./elements/scrollbar.js";
 import { TextElement } from "./elements/textElement.js";
-import { TreeDescripton } from "./treeDescription.js";
-import { UIElement } from "./uiElement.js";
 
 export const UIManager = function() {
     this.resources = new ImageManager();
     this.interfaceStack = [];
     this.interfaceTypes = {};
-    this.iconTypes = {};
-    this.fontTypes = {};
-    this.elementTypes = {
-        [UIManager.ELEMENT_TYPE_TEXT]: TextElement,
-        [UIManager.ELEMENT_TYPE_DYNAMIC_TEXT]: DynamicTextElement,
-        [UIManager.ELEMENT_TYPE_BUTTON]: Button,
-        [UIManager.ELEMENT_TYPE_ICON]: Icon,
-        [UIManager.ELEMENT_TYPE_CONTAINER]: Container
-    };
-    this.effectTypes = {
-        [UIManager.EFFECT_TYPE_FADE_IN]: createFadeInEffect,
-        [UIManager.EFFECT_TYPE_FADE_OUT]: createFadeOutEffect
-    }
-    this.elements = new Map();
-    this.previousCollisions = new Set();
 }
 
-UIManager.EFFECT_TYPE_FADE_IN = "FADE_IN";
-UIManager.EFFECT_TYPE_FADE_OUT = "FADE_OUT";
+UIManager.ELEMENT_TYPE = {
+    NONE: 0,
+    TEXT: 1,
+    BUTTON: 2,
+    ICON: 3,
+    CONTAINER: 4,
+    SCROLLBAR: 5
+};
 
-UIManager.ELEMENT_TYPE_TEXT = "TEXT";
-UIManager.ELEMENT_TYPE_DYNAMIC_TEXT = "DYNAMIC_TEXT";
-UIManager.ELEMENT_TYPE_BUTTON = "BUTTON";
-UIManager.ELEMENT_TYPE_CONTAINER = "CONTAINER";
-UIManager.ELEMENT_TYPE_ICON = "ICON";
+UIManager.ELEMENT_TYPE_MAP = {
+    "BUTTON": UIManager.ELEMENT_TYPE.BUTTON,
+    "TEXT": UIManager.ELEMENT_TYPE.TEXT,
+    "ICON": UIManager.ELEMENT_TYPE.ICON,
+    "CONTAINER": UIManager.ELEMENT_TYPE.CONTAINER,
+    "SCROLLBAR": UIManager.ELEMENT_TYPE.SCROLLBAR
+};
 
 UIManager.prototype.load = function(interfaceTypes, iconTypes, fontTypes) {
     if(typeof interfaceTypes === "object") {
         this.interfaceTypes = interfaceTypes;
-        //this.resources.loadImages(iconTypes, (imageID, image) => console.log(imageID), (imageID, error) => console.error(imageID));
     } else {
         Logger.log(false, "InterfaceTypes cannot be undefined!", "UIManager.prototype.load", null);
     }
 
     if(typeof iconTypes === "object") {
-        this.iconTypes = iconTypes;
+        this.resources.createImages(iconTypes);
     } else {
         Logger.log(false, "IconTypes cannot be undefined!", "UIManager.prototype.load", null);
     }
+}
 
-    if(typeof fontTypes === "object") {
-        this.fontTypes = fontTypes;
-    } else {
-        Logger.log(false, "FontTypes cannot be undefined!", "UIManager.prototype.load", null);
+UIManager.prototype.debug = function(context) {
+    for(let i = this.interfaceStack.length - 1; i >= 0; i--) {
+        const userInterface = this.interfaceStack[i];
+
+        userInterface.debug(context);
     }
 }
 
-UIManager.prototype.getInterfaceStack = function() {
-    return this.interfaceStack;
-}
+UIManager.prototype.draw = function(gameContext, context) {
+    const { timer } = gameContext;
+    const realTime = timer.getRealTime();
+    const deltaTime = timer.getDeltaTime();
 
-UIManager.prototype.getUniqueID = function(interfaceID, elementID) {
-    return interfaceID + "-" + elementID;
-}
+    for(let i = this.interfaceStack.length - 1; i >= 0; i--) {
+        const userInterface = this.interfaceStack[i];
 
-UIManager.prototype.getElement = function(interfaceID, elementID) {
-    const uniqueID = this.getUniqueID(interfaceID, elementID);
-    const element = this.elements.get(uniqueID);
-
-    if(!element) {
-        return null;
+        userInterface.draw(context, realTime, deltaTime);
     }
-
-    return element;
 }
 
-UIManager.prototype.getElementByID = function(uniqueID) {
-    const element = this.elements.get(uniqueID);
-
-    if(!element) {
-        return null;
-    }
-
-    return element;
-}
-
-UIManager.prototype.createElement = function(uniqueID, typeID, config) {
-    const Type = this.elementTypes[typeID];
-
-    if(!Type) {
-        return null;
-    }
-
-    const element = new Type(uniqueID);
-
-    element.loadFromConfig(config);
-
-    this.elements.set(uniqueID, element);
-
-    return element;
-}
-
-UIManager.prototype.destroyElement = function(uniqueID) {
-    const element = this.elements.get(uniqueID);
-
-    if(!element) {
-        Logger.log(false, "Element does not exist!", "UIManager.prototype.destroyElement", {uniqueID});
-        return;
-    }
-
-    element.closeFamily();
-
-    this.elements.delete(uniqueID);
-}
-
-UIManager.prototype.getInterfaceIndex = function(userInterfaceID) {
+UIManager.prototype.getInterfaceIndex = function(interfaceID) {
     for(let i = 0; i < this.interfaceStack.length; i++) {
-        const tree = this.interfaceStack[i];
-        const id = tree.getID();
+        const userInterface = this.interfaceStack[i];
+        const currentID = userInterface.getID();
 
-        if(id === userInterfaceID) {
+        if(currentID === interfaceID) {
             return i;
         }
     }
@@ -134,261 +80,254 @@ UIManager.prototype.getInterfaceIndex = function(userInterfaceID) {
 }
 
 UIManager.prototype.update = function(gameContext) {
-    const { client } = gameContext;
-    const { cursor } = client;
+    for(let i = 0; i < this.interfaceStack.length; i++) {
+        const userInterface = this.interfaceStack[i];
 
-    this.updateElementCollisions(cursor.position.x, cursor.position.y, cursor.radius);
+        userInterface.update(gameContext);
+    }
 }
 
-UIManager.prototype.end = function() {
-    this.elements.clear();
+UIManager.prototype.exit = function() {
     this.interfaceStack = [];
 }
 
-UIManager.prototype.updateElementCollisions = function(mouseX, mouseY, mouseRange) {
-    const currentCollisions = new Set();
-    const collidedElements = this.getCollidedElements(mouseX, mouseY, mouseRange);
+UIManager.prototype.onClick = function(mouseX, mouseY, mouseRange) {
+    const clickedElements = this.getCollidedElements(mouseX, mouseY, mouseRange);
 
-    for(const element of collidedElements) {
-        const elementUID = element.getID();
-        const isPreviousCollision = this.previousCollisions.has(elementUID);
+    for(let i = 0; i < clickedElements.length; i++) {
+        const element = clickedElements[i];
+        const hasFlag = element.hasBehavior(UIElement.BEHAVIOR.CLICKABLE);
 
-        if(isPreviousCollision) {
-            element.events.emit(UIElement.EVENT_COLLISION, mouseX, mouseY, mouseRange);
-        } else {
-            element.events.emit(UIElement.EVENT_FIRST_COLLISION, mouseX, mouseY, mouseRange);
-        }
-
-        currentCollisions.add(elementUID);
-    }
-    
-    for(const elementUID of this.previousCollisions) {
-        const isCurrentCollision = currentCollisions.has(elementUID);
-
-        if(!isCurrentCollision) {
-            const element = this.getElementByID(elementUID);
-
-            element.events.emit(UIElement.EVENT_FINAL_COLLISION, mouseX, mouseY, mouseRange);
+        if(hasFlag) {
+            element.onClick();
         }
     }
-
-    this.previousCollisions = currentCollisions;
 }
 
 UIManager.prototype.getCollidedElements = function(mouseX, mouseY, mouseRange) {
     for(let i = this.interfaceStack.length - 1; i >= 0; i--) {
-        const tree = this.interfaceStack[i];
-        const roots = tree.getRoots();
+        const userInterface = this.interfaceStack[i];
+        const collisions = userInterface.getCollidedElements(mouseX, mouseY, mouseRange);
 
-        for(const elementUID of roots) {
-            const element = this.elements.get(elementUID);
-            const collisions = element.getCollisions(mouseX, mouseY, mouseRange);
-    
-            if(collisions.length > 0) {
-                return collisions;
-            }
+        if(collisions.length > 0) {
+            return collisions;
         }
     }
 
     return [];
 }
 
-UIManager.prototype.addClick = function(interfaceID, buttonID, callback) {
-    const button = this.getElement(interfaceID, buttonID);
-
-    if(!(button instanceof Button)) {
-        Logger.log(false, "Button does not exist!", "UIManager.prototype.addClick", { interfaceID, buttonID });
-        return;
-    }
-
-    button.events.subscribe(Button.EVENT_CLICKED, "UI_MANAGER", callback);
-}
-
-UIManager.prototype.removeClick = function(interfaceID, buttonID) {
-    const button = this.getElement(interfaceID, buttonID);
-
-    if(!(button instanceof Button)) {
-        Logger.log(false, "Button does not exist!", "UIManager.prototype.addClick", { interfaceID, buttonID });
-        return;
-    }
-
-    button.events.mute(Button.EVENT_CLICKED);
-}
-
-UIManager.prototype.setText = function(interfaceID, textID, message) {
-    const text = this.getElement(interfaceID, textID);
-
-    if(!(text instanceof TextElement)) {
-        Logger.log(false, "Text does not exist!", "UIManager.prototype.setText", { interfaceID, textID });
-        return;
-    }
-
-    text.setText(message);
-}
-
-UIManager.prototype.addDynamicText = function(interfaceID, textID, onEvent) {
-    const text = this.getElement(interfaceID, textID);
-
-    if(!(text instanceof DynamicTextElement)) {
-        Logger.log(false, "Text does not exist!", "UIManager.prototype.addTextRequest", { interfaceID, textID });
-        return;
-    }
-
-    text.events.subscribe(DynamicTextElement.EVENT_REQUEST_TEXT, "UI_MANAGER", (element) => onEvent(element));
-}
-
-UIManager.prototype.removeDynamicText = function(interfaceID, textID) {
-    const text = this.getElement(interfaceID, textID);
-
-    if(!(text instanceof DynamicTextElement)) {
-        Logger.log(false, "Text does not exist!", "UIManager.prototype.removeTextRequest", { interfaceID, textID });
-        return;
-    }
-
-    text.events.mute(DynamicTextElement.EVENT_REQUEST_TEXT);
-}
-
-UIManager.prototype.createInterfaceElements = function(userInterfaceID) {
-    const userInterface = this.interfaceTypes[userInterfaceID];
-    const elements = new Map();
-
-    if(!userInterface) {
-        Logger.log(false, "Interface does not exist!", "UIManager.prototype.createInterfaceElements", { userInterfaceID });
-        return elements;
-    }
-
-    for(const elementID in userInterface) {
-        const config = userInterface[elementID];
-        const uniqueID = this.getUniqueID(userInterfaceID, elementID);
-        const element = this.createElement(uniqueID, config.type, config);
-
-        if(!element) {
-            Logger.log(false, "Element could not be created!", "UIManager.prototype.createInterfaceElements", { userInterfaceID, elementID });
-            continue;
-        }
-
-        elements.set(elementID, element);
-    }
-    
-    for(const elementID in userInterface) {
-        const { children } = userInterface[elementID];
-        const element = elements.get(elementID);
-
-        if(!element || !Array.isArray(children)) {
-            continue;
-        }
-
-        for(const childID of children) {
-            const child = elements.get(childID);
-
-            if(!child) {
-                Logger.log(false, "Child is not part of the interface!", "UIManager.prototype.createInterfaceElements", { elementID, childID, userInterfaceID });
-                continue;
-            }
-
-            const uniqueID = child.getID();
-
-            element.addChild(child, uniqueID);
-        }
-    }
-
-    return elements;
-}
-
-UIManager.prototype.addEffects = function(gameContext, element, effects = []) {
-    const { renderer } = gameContext;
-
-    for(const effectConfig of effects) {
-        const { type, value, threshold } = effectConfig;
-        const effectBuilder = this.effectTypes[type];
-
-        if(!effectBuilder) {
-            continue;
-        }
-
-        const effect = effectBuilder(element, value, threshold);
-
-        renderer.effects.addEffect(effect);
-    }
-}
-
-UIManager.prototype.addElementAnchor = function(gameContext, element, originalPosition, anchorType = Renderer.ANCHOR_TYPE_TOP_LEFT) {
-    const { renderer } = gameContext;
-    const { bounds } = element;
-    const { w, h } = bounds;
-    const { x, y } = originalPosition;
-
-    const elementUID = element.getID();
-    const anchor = renderer.getAnchor(anchorType, x, y, w, h);
-            
-    element.setPosition(anchor.x, anchor.y);
-
-    renderer.events.subscribe(Renderer.EVENT_SCREEN_RESIZE, elementUID, (width, height) => {
-        const anchor = renderer.getAnchor(anchorType, x, y, w, h);
-        
-        element.setPosition(anchor.x, anchor.y);
-    });    
-}
-
-UIManager.prototype.createEmptyInterface = function(id) {
-    return {
-        "id": id,
-        "elements": [],
-        "roots": []
-    }
-}
-
-UIManager.prototype.parseUI = function(userInterfaceID, gameContext) {
-    const userInterface = this.interfaceTypes[userInterfaceID];
-
-    if(!userInterface) {
-        Logger.log(false, "Interface does not exist!", "UIManager.prototype.parseUI", { userInterfaceID });
-        return;
-    }
-
-    const elements = this.createInterfaceElements(userInterfaceID);
-    const tree = new TreeDescripton(userInterfaceID);
-
-    for(const [configID, element] of elements) {
-        const { anchor, effects, position } = userInterface[configID];
-        const uniqueID = element.getID();
-
-        this.addEffects(gameContext, element, effects);
-        tree.addElement(uniqueID);
-
-        if(!element.hasParent()) {
-            this.addElementAnchor(gameContext, element, position, anchor);
-            tree.addRoot(uniqueID);
-        }
-    }
-
-    this.interfaceStack.push(tree);
-}
-
-UIManager.prototype.unparseUI = function(userInterfaceID, gameContext) {
-    const { renderer } = gameContext;
-    const interfaceIndex = this.getInterfaceIndex(userInterfaceID);
+UIManager.prototype.getInterface = function(interfaceID) {
+    const interfaceIndex = this.getInterfaceIndex(interfaceID);
 
     if(interfaceIndex === -1) {
-        Logger.log(false, "Interface does not exist!", "UIManager.prototype.unparseUI", { userInterfaceID });
+        return null;
+    }
+
+    return this.interfaceStack[interfaceIndex];
+}
+
+UIManager.prototype.onWindowResize = function(windowWidth, windowHeight) {
+    for(let i = 0; i < this.interfaceStack.length; i++) {
+        const userInterface = this.interfaceStack[i];
+
+        userInterface.updateRootAnchors(windowWidth, windowHeight);
+    }
+}
+
+UIManager.prototype.parseUI = function(interfaceID, gameContext) {
+    const config = this.interfaceTypes[interfaceID];
+
+    if(!config) {
+        Logger.log(false, "Interface does not exist!", "UIManager.prototype.parseUI", { interfaceID });
         return;
     }
 
-    const tree = this.interfaceStack[interfaceIndex];
-    const elements = tree.getElements();
-    const roots = tree.getRoots();
-
-    for(const elementUID of roots) {
-        renderer.events.unsubscribe(Renderer.EVENT_SCREEN_RESIZE, elementUID);
+    if(this.getInterfaceIndex(interfaceID) !== -1) {
+        return;
     }
+
+    const userInterface = new UserInterface(interfaceID);
+
+    userInterface.fromConfig(gameContext, config);
     
-    for(const elementUID of elements) {
-        this.destroyElement(elementUID);
+    this.interfaceStack.push(userInterface);
+
+    return userInterface;
+}
+
+UIManager.prototype.unparseUI = function(interfaceID) {
+    const interfaceIndex = this.getInterfaceIndex(interfaceID);
+
+    if(interfaceIndex === -1) {
+        Logger.log(false, "Interface does not exist!", "UIManager.prototype.unparseUI", { interfaceID });
+        return;
     }
 
-    if(interfaceIndex === this.interfaceStack.length - 1) {
-        this.previousCollisions.clear();
+    const userInterface = this.interfaceStack[interfaceIndex];
+
+    userInterface.clear();
+
+    this.interfaceStack.splice(interfaceIndex, 1);
+}
+
+UIManager.prototype.removeUI = function(interfaceID) {
+    const interfaceIndex = this.getInterfaceIndex(interfaceID);
+
+    if(interfaceIndex === -1) {
+        Logger.log(false, "Interface does not exist!", "UIManager.prototype.removeUI", { interfaceID });
+        return;
     }
 
     this.interfaceStack.splice(interfaceIndex, 1);
+}
+
+UIManager.prototype.createElement = function(typeID, config, DEBUG_NAME) {
+    const {
+        position = { x: 0, y: 0 },
+        width = 0,
+        height = 0,
+        anchor = UIElement.ANCHOR_TYPE.TOP_LEFT,
+        opacity = 1
+    } = config;
+
+    const { x, y } = position;
+
+    switch(typeID) {
+        case UIManager.ELEMENT_TYPE.BUTTON: {
+            const element = new Button(DEBUG_NAME);
+            const { shape = Button.SHAPE.RECTANGLE, radius = width } = config;
+
+            element.addBehavior(UIElement.BEHAVIOR.COLLIDEABLE);
+            element.addBehavior(UIElement.BEHAVIOR.CLICKABLE);
+
+            element.setPosition(x, y);
+            element.setOpacity(opacity);
+            element.setOrigin(x, y);
+            element.setAnchor(anchor);
+
+            switch(shape) {
+                case Button.SHAPE.RECTANGLE: {
+                    element.setSize(width, height);
+                    element.setShape(Button.SHAPE.RECTANGLE);
+                    break;
+                }
+                case Button.SHAPE.CIRCLE: {
+                    element.setSize(radius, radius);
+                    element.setShape(Button.SHAPE.CIRCLE);
+                    break;
+                }
+                default: {
+                    Logger.log(Logger.CODE.ENGINE_WARN, "Shape does not exist!", "UIManager.prototype.createElement", { "shapeID": shape });
+                    break;
+                }
+            }
+
+            return element;
+        }
+        case UIManager.ELEMENT_TYPE.CONTAINER: {
+            const element = new Container(DEBUG_NAME);
+
+            element.addBehavior(UIElement.BEHAVIOR.COLLIDEABLE);
+
+            element.setPosition(x, y);
+            element.setOpacity(opacity);
+            element.setOrigin(x, y);
+            element.setAnchor(anchor);
+
+            element.setSize(width, height);
+
+            return element;
+        }
+        case UIManager.ELEMENT_TYPE.ICON: {
+            const element = new Icon(DEBUG_NAME);
+            const {
+                image = null
+            } = config;
+
+            element.setPosition(x, y);
+            element.setOpacity(opacity);
+            element.setOrigin(x, y);
+            element.setAnchor(anchor);
+            element.setSize(width, height);
+            element.setImage(image);
+            element.onDraw = (context, localX, localY) => {
+                const image = this.resources.getImage(element.imageID);
+            
+                if(!image) {
+                    return;
+                }
+            
+                context.drawImage(image, localX, localY);
+            }
+
+            return element;
+        }
+        case UIManager.ELEMENT_TYPE.SCROLLBAR: {
+            const element = new Scrollbar(DEBUG_NAME);
+
+            element.addBehavior(UIElement.BEHAVIOR.COLLIDEABLE);
+            element.addBehavior(UIElement.BEHAVIOR.CLICKABLE);
+
+            element.setPosition(x, y);
+            element.setOpacity(opacity);
+            element.setOrigin(x, y);
+            element.setAnchor(anchor);
+
+            return element;
+        }
+        case UIManager.ELEMENT_TYPE.TEXT: {
+            const element = new TextElement(DEBUG_NAME);
+            const { 
+                text = "ERROR",
+                fontType = TextStyle.DEFAULT.FONT_TYPE,
+                fontSize = TextStyle.DEFAULT.FONT_SIZE,
+                align = TextStyle.TEXT_ALIGNMENT.LEFT,
+                color = [0, 0, 0, 1]
+            } = config;
+
+            element.setPosition(x, y);
+            element.setOpacity(opacity);
+            element.setOrigin(x, y);
+            element.setAnchor(anchor);
+
+            element.setText(text);
+            element.style.setFontType(fontType);
+            element.style.setFontSize(fontSize);
+            element.style.setAlignment(align);
+            element.style.color.setColorArray(color);
+
+            return element;
+        }
+        default: {
+            Logger.log(Logger.CODE.ENGINE_WARN, "ElementType does not exist!", "UIManager.prototype.createElement", { "type": typeID });
+
+            const element = new UIElement(DEBUG_NAME);
+    
+            element.setPosition(x, y);
+            element.setOpacity(opacity);
+            element.setOrigin(x, y);
+            element.setAnchor(anchor);
+
+            return element;
+        }
+    }
+}
+
+UIManager.prototype.addUI = function(userInterface) {
+    if(!(userInterface instanceof UserInterface)) {
+        return;
+    }
+
+    const interfaceID = userInterface.getID();
+
+    if(this.interfaceTypes[interfaceID]) {
+        return;
+    }
+
+    if(this.getInterfaceIndex(interfaceID) !== -1) {
+        return;
+    }
+    
+    this.interfaceStack.push(userInterface);
 }

@@ -1,114 +1,94 @@
 import { Client } from "./client/client.js";
 import { Cursor } from "./client/cursor.js";
-import { EventEmitter } from "./events/eventEmitter.js";
-import { SpriteManager } from "./graphics/spriteManager.js";
+import { SpriteManager } from "./sprite/spriteManager.js";
 import { UIManager } from "./ui/uiManager.js";
 import { StateMachine } from "./state/stateMachine.js";
 import { Timer } from "./timer.js";
 import { TileManager } from "./tile/tileManager.js";
 import { Renderer } from "./renderer.js";
 import { World } from "./world.js";
-import { Button } from "./ui/elements/button.js";
 
-export const GameContext = function(fps = 60) {
+export const GameContext = function() {
     this.id = "GAME_CONTEXT";
-    this.settings = {};
     this.client = new Client();
     this.renderer = new Renderer();
-    this.timer = new Timer(fps);
     this.tileManager = new TileManager();
     this.spriteManager = new SpriteManager();
     this.uiManager = new UIManager();
     this.world = new World();
     this.states = new StateMachine(this);
-
-    this.timer.input = (realTime, deltaTime) => {
+    this.timer = new Timer();
+    
+    this.timer.input = () => {
         this.client.update();
     }
 
-    this.timer.update = (gameTime, fixedDeltaTime) => {
+    this.timer.update = () => {
         this.states.update(this);
         this.world.update(this);
     }
 
-    this.timer.render = (realTime, deltaTime) => {
+    this.timer.render = () => {
         this.spriteManager.update(this);
         this.tileManager.update(this);
         this.uiManager.update(this);
         this.renderer.update(this);
     }
 
-    this.addClickEvent();
-}
+    this.renderer.events.on(Renderer.EVENT.SCREEN_RESIZE, (width, height) => {
+        this.uiManager.onWindowResize(width, height);
+    }, { permanent: true });
 
-GameContext.prototype.addClickEvent = function() {
-    const { cursor } = this.client;
-
-    cursor.events.subscribe(Cursor.LEFT_MOUSE_CLICK, EventEmitter.SUPER_SUBSCRIBER_ID, () => {
-        const clickedElements = this.uiManager.getCollidedElements(cursor.position.x, cursor.position.y, cursor.radius);
-
-        for(const element of clickedElements) {
-            element.events.emit(Button.EVENT_CLICKED);
+    this.client.cursor.events.on(Cursor.EVENT.BUTTON_CLICK, (buttonID, cursorX, cursorY) => {
+        if(buttonID === Cursor.BUTTON.LEFT) {
+            this.uiManager.onClick(cursorX, cursorY, this.client.cursor.radius);
         }
-    });
+    }, { permanent: true });
 }
 
-GameContext.prototype.start = function() {
-    this.world.actionQueue.start();
-    this.timer.start();
-}
-
-GameContext.prototype.end = function() {
-    this.world.actionQueue.end();
-    this.world.entityManager.end();
+GameContext.prototype.exit = function() {
+    this.world.exit();
     this.spriteManager.clear();
-    this.tileManager.end();
-    this.uiManager.end();
+    this.uiManager.exit();
 }
 
 GameContext.prototype.loadResources = function(resources) {
-    this.client.musicPlayer.load(resources.music);
-    this.client.soundPlayer.load(resources.sounds);
-    this.client.socket.load(resources.settings.socket);
-    this.world.actionQueue.load(resources.actions);
-    this.world.mapManager.load(resources.maps);
-    this.world.controllerManager.load(resources.controllers);
     this.spriteManager.load(resources.sprites);
     this.tileManager.load(resources.tiles, resources.tileMeta);
     this.uiManager.load(resources.interfaces, resources.icons, resources.fonts);
-    this.world.entityManager.load(resources.traits);
-    this.settings = resources.settings;
-    this.world.config = resources.world;
+    this.client.musicPlayer.load(resources.music);
+    this.client.soundPlayer.load(resources.sounds);
+    this.client.socket.load(resources.network.socket);
+    this.world.actionQueue.load(resources.actions);
+    this.world.mapManager.load(resources.maps);
+    this.world.entityManager.load(resources.traits, resources.archetypes);
 }
 
-GameContext.prototype.initialize = function() {}
+GameContext.prototype.getContextAtMouse = function() {
+    const context = this.renderer.getCollidedContext(this.client.cursor.positionX, this.client.cursor.positionY, this.client.cursor.radius);
 
-GameContext.prototype.getCameraAtMouse = function() {
-    const camera = this.renderer.getCollidedCamera(this.client.cursor.position.x, this.client.cursor.position.y, this.client.cursor.radius);
+    if(!context) {
+        return null;
+    }
 
-    return camera;
+    return context;
 }
 
 GameContext.prototype.getMouseTile = function() {
-    const camera = this.getCameraAtMouse();
+    const context = this.getContextAtMouse();
 
-    if(!camera) {
+    if(!context) {
         return {
             "x": -1,
             "y": -1
         }
     }
 
-    const mouseTile = camera.screenToWorldTile(this.client.cursor.position.x, this.client.cursor.position.y);
+    const { x, y } = context.getWorldPosition(this.client.cursor.positionX, this.client.cursor.positionY);
+    const camera = context.getCamera();
+    const mouseTile = camera.transformPositionToTile(x, y);
 
     return mouseTile;
-}
-
-GameContext.prototype.getMouseEntity = function() {
-    const { x, y } = this.getMouseTile();
-    const mouseEntity = this.world.getTileEntity(x, y);
-    
-    return mouseEntity;
 }
 
 GameContext.prototype.clearEvents = function() {
@@ -117,10 +97,6 @@ GameContext.prototype.clearEvents = function() {
     this.client.socket.events.unsubscribeAll(this.id);
     this.renderer.events.unsubscribeAll(this.id);
     this.world.actionQueue.events.unsubscribeAll(this.id);
-}
-
-GameContext.prototype.getID = function() {
-    return this.id;
 }
 
 GameContext.prototype.switchState = function(stateID) {

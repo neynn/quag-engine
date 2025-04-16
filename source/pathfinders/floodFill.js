@@ -1,15 +1,36 @@
 export const FloodFill = function() {}
 
-FloodFill.IGNORE_NEXT = 0;
-FloodFill.USE_NEXT = 1;
+FloodFill.RESPONSE = {
+    IGNORE_NEXT: 0,
+    USE_NEXT: 1
+};
 
-FloodFill.createNode = function(g, positionX, positionY, parent) {
-    return { 
-        "g": g,
+FloodFill.NEIGHBOR_COST = {
+    STRAIGHT: 1,
+    CROSS: 1.5
+};
+
+FloodFill.STRAIGHT = {
+    UP: 1 << 0,
+    RIGHT: 1 << 1,
+    DOWN: 1 << 2,
+    LEFT: 1 << 3
+};
+
+FloodFill.CROSS = {
+    UP_LEFT: FloodFill.STRAIGHT.UP | FloodFill.STRAIGHT.LEFT,
+    UP_RIGHT: FloodFill.STRAIGHT.UP | FloodFill.STRAIGHT.RIGHT,
+    DOWN_LEFT: FloodFill.STRAIGHT.DOWN | FloodFill.STRAIGHT.LEFT,
+    DOWN_RIGHT: FloodFill.STRAIGHT.DOWN | FloodFill.STRAIGHT.RIGHT
+};
+
+FloodFill.createNode = function(positionX, positionY, cost, type, parent) {
+    return {
         "positionX": positionX,
         "positionY": positionY,
-        "parent": parent,
-        "state": null
+        "cost": cost,
+        "type": type,
+        "parent": parent
     }
 }
 
@@ -17,81 +38,161 @@ FloodFill.isNodeInBounds = function(positionX, positionY, mapWidth, mapHeight) {
     return positionX < mapWidth && positionX >= 0 && positionY < mapHeight && positionY >= 0;
 }
 
-FloodFill.getPositionKey = function(positionX, positionY) {
-    return `${positionX}-${positionY}`;
+FloodFill.getNeighbors = function(positionX, positionY) {
+    return [
+        positionX, positionY - 1, FloodFill.STRAIGHT.UP,
+        positionX + 1, positionY, FloodFill.STRAIGHT.RIGHT,
+        positionX, positionY + 1, FloodFill.STRAIGHT.DOWN,
+        positionX - 1, positionY, FloodFill.STRAIGHT.LEFT
+    ]
 }
 
-FloodFill.getFirstEntry = function(map) {
-    return map.entries().next().value;
+FloodFill.getCrossNeighbors = function(positionX, positionY) {
+    return [
+        positionX - 1, positionY - 1, FloodFill.CROSS.UP_LEFT,
+        positionX + 1, positionY - 1, FloodFill.CROSS.UP_RIGHT,
+        positionX - 1, positionY + 1, FloodFill.CROSS.DOWN_LEFT,
+        positionX + 1, positionY + 1, FloodFill.CROSS.DOWN_RIGHT
+    ]
 }
 
 FloodFill.search = function(startX, startY, gLimit, mapWidth, mapHeight, onCheck) {
-    const openNodes = new Map();
+    const queue = [];
     const visitedNodes = new Set();
-    const startNode = FloodFill.createNode(0, startX, startY, null);
-    const allNodes = [];
 
-    openNodes.set(FloodFill.getPositionKey(startNode.positionX, startNode.positionY), startNode);
+    const startNode = FloodFill.createNode(startX, startY, 0, null, null);
+    const startID = startY * mapWidth + startX;
 
-    while(openNodes.size !== 0) {
-        const [nodeID, node] = FloodFill.getFirstEntry(openNodes);
-        const { g, positionX, positionY } = node;
+    let index = 0;
 
-        openNodes.delete(nodeID);
-        visitedNodes.add(nodeID);
+    queue.push(startNode);
+    visitedNodes.add(startID);
 
-        if(g >= gLimit) {
-            return allNodes;
+    while(index < queue.length) {
+        const node = queue[index++];
+        const { cost, positionX, positionY } = node;
+
+        if(cost >= gLimit) {
+            continue;
         }
 
-        const children = [
-            FloodFill.createNode(g + 1, positionX, positionY - 1, node),
-            FloodFill.createNode(g + 1, positionX + 1, positionY, node),
-            FloodFill.createNode(g + 1, positionX, positionY + 1, node),
-            FloodFill.createNode(g + 1, positionX - 1, positionY, node),
-        ];
+        const neighbor_cost = cost + FloodFill.NEIGHBOR_COST.STRAIGHT;
+        const neighbors = FloodFill.getNeighbors(positionX, positionY);
 
-        for(const childNode of children) {
-            const { positionX, positionY } = childNode;
-            const isChildInBounds = FloodFill.isNodeInBounds(positionX, positionY, mapWidth, mapHeight);
-            const childKey = FloodFill.getPositionKey(positionX, positionY);
+        for(let i = 0; i < neighbors.length; i += 3) {
+            const x = neighbors[i];
+            const y = neighbors[i + 1];
+            const type = neighbors[i + 2];
+            const neighborID = y * mapWidth + x;
 
-            if(!isChildInBounds || visitedNodes.has(childKey) || openNodes.has(childKey)) {
+            if(visitedNodes.has(neighborID) || !FloodFill.isNodeInBounds(x, y, mapWidth, mapHeight)) {
                 continue;
             }
 
-            allNodes.push(childNode);
+            const childNode = FloodFill.createNode(x, y, neighbor_cost, type, node);
 
-            if(onCheck(childNode, node) === FloodFill.USE_NEXT) {
-                openNodes.set(childKey, childNode);
+            visitedNodes.add(neighborID);
+
+            if(onCheck(childNode, node) === FloodFill.RESPONSE.USE_NEXT) {
+                queue.push(childNode);
             }
         }
     }
-
-    return allNodes;
 }
 
-FloodFill.walkTree = function(node, walkedNodes) {
-    walkedNodes.push(node);
+FloodFill.search_cross = function(startX, startY, gLimit, mapWidth, mapHeight, onCheck) {
+    const queue = [];
+    const visitedNodes = new Set();
 
-    if(node.parent === null) {
-        return walkedNodes;
+    const startNode = FloodFill.createNode(startX, startY, 0, null, null);
+    const startID = startY * mapWidth + startX;
+
+    let index = 0;
+
+    queue.push(startNode);
+    visitedNodes.add(startID);
+
+    while(index < queue.length) {
+        const node = queue[index++];
+        const { cost, positionX, positionY } = node;
+
+        if(cost >= gLimit) {
+            continue;
+        }
+
+        let validStraights = 0b00000000;
+
+        const neighbor_cost = cost + FloodFill.NEIGHBOR_COST.STRAIGHT;
+        const neighbors = FloodFill.getNeighbors(positionX, positionY);
+
+        for(let i = 0; i < neighbors.length; i += 3) {
+            const x = neighbors[i];
+            const y = neighbors[i + 1];
+            const type = neighbors[i + 2];
+            const neighborID = y * mapWidth + x;
+
+            if(visitedNodes.has(neighborID) || !FloodFill.isNodeInBounds(x, y, mapWidth, mapHeight)) {
+                continue;
+            }
+
+            const childNode = FloodFill.createNode(x, y, neighbor_cost, type, node);
+
+            visitedNodes.add(neighborID);
+
+            if(onCheck(childNode, node) === FloodFill.RESPONSE.USE_NEXT) {
+                if(neighbor_cost <= gLimit) {
+                    validStraights |= type;
+                }
+
+                queue.push(childNode);
+            }
+        }
+
+        const cross_neighbor_cost = cost + FloodFill.NEIGHBOR_COST.CROSS;
+        const cross_neighbors = FloodFill.getCrossNeighbors(positionX, positionY);
+
+        for(let i = 0; i < cross_neighbors.length; i += 3) {
+            const x = cross_neighbors[i];
+            const y = cross_neighbors[i + 1];
+            const type = cross_neighbors[i + 2];
+
+            if((validStraights & type) !== type) {
+                continue;
+            }
+
+            const neighborID = y * mapWidth + x;
+
+            if(visitedNodes.has(neighborID) || !FloodFill.isNodeInBounds(x, y, mapWidth, mapHeight)) {
+                continue;
+            }
+
+            const childNode = FloodFill.createNode(x, y, cross_neighbor_cost, type, node);
+
+            visitedNodes.add(neighborID);
+
+            if(onCheck(childNode, node) === FloodFill.RESPONSE.USE_NEXT) {
+                queue.push(childNode);
+            }
+        }
     }
-
-    return FloodFill.walkTree(node.parent, walkedNodes);
 }
 
-FloodFill.flatten = function(mainNode) {
+FloodFill.walkTree = function(startNode) {
+    const nodeStack = [startNode];
     const walkedNodes = [];
-    return FloodFill.walkTree(mainNode, walkedNodes);
-}
 
-FloodFill.reverse = function(flatTree) {
-    const list = [];
+    while(nodeStack.length !== 0) {
+        const node = nodeStack.pop();
+        const { parent } = node;
 
-    for(let i = flatTree.length - 1; i >= 0; i--) {
-        list.push(flatTree[i]);
+        walkedNodes.push(node);
+
+        if(parent === null) {
+            break;
+        }
+
+        nodeStack.push(parent);
     }
 
-    return list;
+    return walkedNodes;
 }

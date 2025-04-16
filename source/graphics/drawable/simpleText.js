@@ -1,32 +1,25 @@
-import { Drawable } from "../drawable.js";
 import { TextStyle } from "../applyable/textStyle.js";
+import { Graph } from "../graph.js";
 
-export const SimpleText = function(id) {
-    Drawable.call(this, id, "SIMPLE_TEXT");
+export const SimpleText = function() {
+    Graph.call(this, Graph.TYPE.OTHER, "SIMPLE_TEXT");
 
     this.style = new TextStyle();
     this.text = "SAMPLE TEXT";
-
-    this.style.setColor(238, 238, 238, 1);
+    this.style.color.setColor(238, 238, 238, 1);
 }
 
-SimpleText.prototype = Object.create(Drawable.prototype);
+SimpleText.prototype = Object.create(Graph.prototype);
 SimpleText.prototype.constructor = SimpleText;
 
-SimpleText.prototype.onDraw = function(context, viewportX, viewportY, localX, localY) {
-    const renderX = localX - viewportX;
-    const renderY = localY - viewportY;
-    
+SimpleText.prototype.onDraw = function(context, localX, localY) {
     this.style.apply(context);
 
-    context.globalAlpha = this.opacity;
-    context.fillText(this.text, renderX, renderY);
+    context.fillText(this.text, localX, localY);
 }
 
 SimpleText.prototype.setText = function(text) {
-    if(text === undefined) {
-        return;
+    if(text !== undefined) {
+        this.text = text;
     }
-
-    this.text = text;
 }

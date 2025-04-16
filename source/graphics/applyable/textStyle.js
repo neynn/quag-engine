@@ -1,22 +1,30 @@
-import { Applyable } from "../applyable.js";
+import { Color } from "../color.js";
 
 export const TextStyle = function() {
-    Applyable.call(this);
-    
-    this.fontSize = 10;
-    this.fontType = "sans-serif";
-    this.font = "10px sans-serif";
-    this.baseline = "middle";
-    this.alignment = "left"
+    this.color = new Color();
+    this.fontSize = TextStyle.DEFAULT.FONT_SIZE;
+    this.fontType = TextStyle.DEFAULT.FONT_TYPE;
+    this.baseline = TextStyle.TEXT_BASELINE.MIDDLE;
+    this.alignment = TextStyle.TEXT_ALIGNMENT.LEFT;
+    this.font = null;
+
+    this.updateFont();
 }
 
-TextStyle.prototype = Object.create(Applyable.prototype);
-TextStyle.prototype.constructor = TextStyle;
+TextStyle.DEFAULT = {
+    FONT_SIZE: 10,
+    FONT_TYPE: "sans-serif"
+};
 
-TextStyle.TEXT_BASELINE_MIDDLE = "middle";
-TextStyle.TEXT_ALIGN_RIGHT = "right";
-TextStyle.TEXT_ALIGN_LEFT = "left";
-TextStyle.TEXT_ALIGN_CENTER = "center";
+TextStyle.TEXT_BASELINE = {
+    MIDDLE: "middle"
+};
+
+TextStyle.TEXT_ALIGNMENT = {
+    RIGHT: "right",
+    LEFT: "left",
+    MIDDLE: "center"
+};
 
 TextStyle.prototype.setAlignment = function(alignment) {
     if(alignment === undefined) {
@@ -56,16 +64,8 @@ TextStyle.prototype.setFontSize = function(fontSize) {
     this.updateFont();
 }
 
-TextStyle.prototype.setFont = function(font) {
-    if(font === undefined) {
-        return;
-    }
-
-    this.font = font;
-}
-
 TextStyle.prototype.apply = function(context) {
-    const fillStyle = this.getRGBAString();
+    const fillStyle = this.color.getRGBAString();
 
     context.font = this.font;
     context.fillStyle = fillStyle;

@@ -34,7 +34,7 @@ RoomManager.prototype.start = function() {
     this.idGenerator.startGenerator();
 }
 
-RoomManager.prototype.end = function() {
+RoomManager.prototype.exit = function() {
     this.rooms.clear();
     this.idGenerator.reset();
 }
@@ -91,7 +91,7 @@ RoomManager.prototype.createRoom = async function(typeID) {
     const roomID = this.idGenerator.getID();
     const room = new RoomType(roomID);
 
-    await room.initialize();
+    await room.init();
     
     room.onMessageSend = (message, clientID) => this.events.emit(RoomManager.EVENT_MESSAGE_SEND, clientID, message);
     room.onMessageBroadcast = (message) => this.events.emit(RoomManager.EVENT_MESSAGE_BROADCAST, roomID, message);

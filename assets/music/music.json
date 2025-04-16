@@ -1,3 +1,3 @@
 {
-    "MUSIC_ID": { "id": "MUSIC_ID", "directory": "assets/music", "source": "MUSIC_FILE", "isLooping": true, "defaultVolume": 1 }
+    "MUSIC_ID": { "directory": ["assets", "music"], "source": "MUSIC_FILE", "isLooping": true, "defaultVolume": 1 }
 }

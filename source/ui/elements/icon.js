@@ -1,44 +1,20 @@
 import { UIElement } from "../uiElement.js";
 
-export const Icon = function(id) {
-    UIElement.call(this, id, "Icon");
+export const Icon = function(DEBUG_NAME) {
+    UIElement.call(this, DEBUG_NAME);
     
-    this.image = null;
+    this.imageID = null;
 }
 
 Icon.prototype = Object.create(UIElement.prototype);
 Icon.prototype.constructor = Icon;
 
-Icon.prototype.loadFromConfig = function(config) {
-    const { id, opacity, position } = config;
-    const { x, y } = position;
-
-    this.DEBUG_NAME = id;
-    this.setPosition(x, y);
-    this.setOpacity(opacity);
-}
-
-Icon.prototype.onDraw = function(context, viewportX, viewportY, localX, localY) {
-    if(!this.image) {
-        return;
-    }
-
-    const { w, h } = this.bounds;
-    context.drawImage(this.image, localX, localY, w, h);
-}
-
-Icon.prototype.onDebug = function(context, viewportX, viewportY, localX, localY) {
-    const { w, h } = this.bounds;
+Icon.prototype.onDebug = function(context, localX, localY) {
     context.globalAlpha = 0.5;
     context.fillStyle = "#0000ff";
-    context.fillRect(localX, localY, w, h);
+    context.fillRect(localX, localY, this.width, this.height);
 }
 
-Icon.prototype.setImage = function(image) {
-    this.image = image;
-    this.bounds.set(0, 0, image.width, image.height);
-}
-
-Icon.prototype.getImage = function() {
-    return this.image;
+Icon.prototype.setImage = function(imageID) {
+    this.imageID = imageID;
 }

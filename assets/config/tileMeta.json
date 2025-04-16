@@ -1,15 +1,11 @@
 {
-    "inversion": {},
-    "ranges": {
-        "empty": { "start": 0, "end": 0},
-        "EXAMPLE_SET": { "start": 1, "end": 99 }
-    },
-    "values": {
-        "1": { "id": 1, "set": "EXAMPLE_SET", "animation": "EXAMPLE_FRAME" }
-    },
+    "graphics": [
+        { "id": 1, "set": "EXAMPLE_SET", "animation": "EXAMPLE_FRAME" }
+    ],
     "autotilers": {
         "EXAMPLE_4BIT": {
-            "type": "4BIT",
+            "type": "MIN_4",
+            "members": [],
             "values": {
                 "0": { "set": null, "animation": null },
                 "1": { "set": null, "animation": null },
@@ -30,7 +26,8 @@
             }
         },
         "EXAMPLE_8BIT": {
-            "type": "8BIT",
+            "type": "MIN_8",
+            "members": [],
             "values": {
                 "0": { "set": null, "animation": null },
                 "1": { "set": null, "animation": null },

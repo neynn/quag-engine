@@ -86,3 +86,10 @@ export const loopValue = function(value, upperLimit, lowerLimit) {
   
 	return value;
 }
+
+export const getRandomChance = function() {
+	const random = Math.random() * 100;
+	const chance = Math.floor(random) + 1;
+
+	return chance;
+}

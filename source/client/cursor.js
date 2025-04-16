@@ -1,59 +1,56 @@
 import { EventEmitter } from "../events/eventEmitter.js";
-import { Vec2 } from "../math/vec2.js";
+import { MouseButton } from "./mouseButton.js";
 
 export const Cursor = function() {
-    this.position = new Vec2(0, 0);
+    this.positionX = 0;
+    this.positionY = 0;
     this.radius = 0;
     this.isLocked = false;
 
-    this.rightDragHappened = false;
-    this.leftDragHappened = false;
-    this.isRightMouseDown = false;
-    this.isLeftMouseDown = false;
-    this.rightMouseDownTime = 0;
-    this.leftMouseDownTime = 0;
+    this.buttons = [];
+    this.buttons[Cursor.BUTTON.LEFT] = new MouseButton();
+    this.buttons[Cursor.BUTTON.MIDDLE] = new MouseButton();
+    this.buttons[Cursor.BUTTON.RIGHT] = new MouseButton();
 
     this.addEventHandler("mousedown", event => this.eventMouseDown(event));
     this.addEventHandler("mouseup", event => this.eventMouseUp(event));
     this.addEventHandler("mousemove", event => this.eventMouseMove(event)); 
     this.addEventHandler("wheel", event => this.eventMouseScroll(event));
     this.addEventHandler("pointerlockchange", event => this.eventPointerLockChange(event));
-    
+    this.addEventHandler("contextmenu", event => event);
+
     this.events = new EventEmitter();
-    this.events.listen(Cursor.LEFT_MOUSE_CLICK);
-    this.events.listen(Cursor.RIGHT_MOUSE_CLICK);
-    this.events.listen(Cursor.LEFT_MOUSE_DRAG);
-    this.events.listen(Cursor.RIGHT_MOUSE_DRAG);
-    this.events.listen(Cursor.LEFT_MOUSE_UP);
-    this.events.listen(Cursor.RIGHT_MOUSE_UP);
-    this.events.listen(Cursor.LEFT_MOUSE_DOWN);
-    this.events.listen(Cursor.RIGHT_MOUSE_DOWN);
-    this.events.listen(Cursor.UP_MOUSE_SCROLL);
-    this.events.listen(Cursor.DOWN_MOUSE_SCROLL);
-    this.events.listen(Cursor.MOVE);
-    this.events.listen(Cursor.LEFT_MOUSE_HELD);
-    this.events.listen(Cursor.RIGHT_MOUSE_HELD);
+    this.events.listen(Cursor.EVENT.BUTTON_UP);
+    this.events.listen(Cursor.EVENT.BUTTON_DOWN);
+    this.events.listen(Cursor.EVENT.BUTTON_CLICK);
+    this.events.listen(Cursor.EVENT.BUTTON_DRAG);
+    this.events.listen(Cursor.EVENT.BUTTON_HOLD);
+    this.events.listen(Cursor.EVENT.SCROLL);
+    this.events.listen(Cursor.EVENT.MOVE);
 }
 
-Cursor.DRAG_DISTANCE_THRESHOLD_SQUARED = 36;
-Cursor.DRAG_DELAY_MILLISECONDS = 120;
+Cursor.EVENT = {
+    BUTTON_UP: "BUTTON_UP",
+    BUTTON_DOWN: "BUTTON_DOWN",
+    BUTTON_CLICK: "BUTTON_CLICK",
+    BUTTON_DRAG: "BUTTON_DRAG",
+    BUTTON_HOLD: "BUTTON_HOLD",
+    SCROLL: "SCROLL",
+    MOVE: "MOVE"
+};
 
-Cursor.LEFT_MOUSE_CLICK = 0;
-Cursor.RIGHT_MOUSE_CLICK = 1;
-Cursor.LEFT_MOUSE_DRAG = 2;
-Cursor.RIGHT_MOUSE_DRAG = 3;
-Cursor.LEFT_MOUSE_UP = 4;
-Cursor.RIGHT_MOUSE_UP = 5;
-Cursor.LEFT_MOUSE_DOWN = 6;
-Cursor.RIGHT_MOUSE_DOWN = 7;
-Cursor.UP_MOUSE_SCROLL = 8;
-Cursor.DOWN_MOUSE_SCROLL = 9;
-Cursor.MOVE = 10;
-Cursor.LEFT_MOUSE_HELD = 11;
-Cursor.RIGHT_MOUSE_HELD = 12;
+Cursor.BUTTON = {
+    LEFT: 0,
+    MIDDLE: 1,
+    RIGHT: 2,
+    MOUSE_4: 3,
+    MOUSE_5: 4
+};
 
-Cursor.BUTTON_LEFT = 0;
-Cursor.BUTTON_RIGHT = 2;
+Cursor.SCROLL = {
+    UP: 0,
+    DOWN: 1
+};
 
 Cursor.prototype.addEventHandler = function(type, onEvent) {
     document.addEventListener(type, (event) => {
@@ -64,92 +61,61 @@ Cursor.prototype.addEventHandler = function(type, onEvent) {
 
 Cursor.prototype.eventMouseMove = function(event) {
     const { pageX, pageY, movementX, movementY } = event;
-    const deltaX = this.isLocked ? - movementX : this.position.x - pageX;
-    const deltaY = this.isLocked ? - movementY : this.position.y - pageY;
+    const deltaX = this.isLocked ? - movementX : this.positionX - pageX;
+    const deltaY = this.isLocked ? - movementY : this.positionY - pageY;
 
-    if(this.isLeftMouseDown) {
-        const elapsedTime = Date.now() - this.leftMouseDownTime;
-        const hasDragged = this.hasDragged(deltaX, deltaY, elapsedTime);
+    for(let i = 0; i < this.buttons.length; i++) {
+        const button = this.buttons[i];
 
-        if(hasDragged) {
-            this.leftDragHappened = true;
-            this.events.emit(Cursor.LEFT_MOUSE_DRAG, deltaX, deltaY);
+        button.onMouseMove(deltaX, deltaY);
+
+        if(button.state === MouseButton.STATE.DRAG) {
+            this.events.emit(Cursor.EVENT.BUTTON_DRAG, i, deltaX, deltaY);
         }
     }
 
-    if(this.isRightMouseDown) {
-        const elapsedTime = Date.now() - this.rightMouseDownTime;
-        const hasDragged = this.hasDragged(deltaX, deltaY, elapsedTime);
-
-        if(hasDragged) {
-            this.rightDragHappened = true;
-            this.events.emit(Cursor.RIGHT_MOUSE_DRAG, deltaX, deltaY);
-        }
-    }
-
-    this.position.x = pageX;
-    this.position.y = pageY;
-    this.events.emit(Cursor.MOVE, deltaX, deltaY);
+    this.positionX = pageX;
+    this.positionY = pageY;
+    this.events.emit(Cursor.EVENT.MOVE, deltaX, deltaY);
 }
 
 Cursor.prototype.eventMouseDown = function(event) {
-    const { button } = event;
+    const buttonID = event.button;
 
-    if(button === Cursor.BUTTON_LEFT) {
-        this.events.emit(Cursor.LEFT_MOUSE_DOWN);
-        this.isLeftMouseDown = true;
-        this.leftMouseDownTime = Date.now();
-
-    } else if(button === Cursor.BUTTON_RIGHT) {
-        this.events.emit(Cursor.RIGHT_MOUSE_DOWN);
-        this.isRightMouseDown = true;
-        this.rightMouseDownTime = Date.now();
+    if(buttonID < 0 || buttonID >= this.buttons.length) {
+        return;
     }
+
+    const button = this.buttons[buttonID];
+
+    this.events.emit(Cursor.EVENT.BUTTON_DOWN, buttonID, this.positionX, this.positionY);
+
+    button.onMouseDown();
 }   
 
 Cursor.prototype.eventMouseUp = function(event) {
-    const { button } = event;
+    const buttonID = event.button;
 
-    if(button === Cursor.BUTTON_LEFT) {
-        if(!this.leftDragHappened) {
-            this.events.emit(Cursor.LEFT_MOUSE_CLICK);
-        }
-
-        this.events.emit(Cursor.LEFT_MOUSE_UP);
-        this.isLeftMouseDown = false;
-        this.leftDragHappened = false;
-        this.leftMouseDownTime = 0;
-
-    } else if(button === Cursor.BUTTON_RIGHT) {
-        if(!this.rightDragHappened) {
-            this.events.emit(Cursor.RIGHT_MOUSE_CLICK);
-        }
-
-        this.events.emit(Cursor.RIGHT_MOUSE_UP);
-        this.isRightMouseDown = false;
-        this.rightDragHappened = false;
-        this.rightMouseDownTime = 0;
+    if(buttonID < 0 || buttonID >= this.buttons.length) {
+        return;
     }
-}
 
-Cursor.prototype.hasDragged = function(deltaX, deltaY, elapsedTime) {
-    if(elapsedTime >= Cursor.DRAG_DELAY_MILLISECONDS) {
-        return true;
+    const button = this.buttons[buttonID];
+
+    if(button.state !== MouseButton.STATE.DRAG) {
+        this.events.emit(Cursor.EVENT.BUTTON_CLICK, buttonID, this.positionX, this.positionY);
     }
+
+    this.events.emit(Cursor.EVENT.BUTTON_UP, buttonID, this.positionX, this.positionY);
     
-    const distance = deltaX * deltaX + deltaY * deltaY;
-
-    return distance >= Cursor.DRAG_DISTANCE_THRESHOLD_SQUARED;
+    button.onMouseUp();
 }
 
 Cursor.prototype.eventMouseScroll = function(event) {
     const { deltaY } = event;
+    const direction = deltaY < 0 ? Cursor.SCROLL.UP : Cursor.SCROLL.DOWN;
 
-    if(deltaY < 0) {
-        this.events.emit(Cursor.UP_MOUSE_SCROLL, deltaY);
-    } else {
-        this.events.emit(Cursor.DOWN_MOUSE_SCROLL, deltaY);
-    }
+    this.events.emit(Cursor.EVENT.SCROLL, direction, deltaY);
 }
 
 Cursor.prototype.eventPointerLockChange = function(event) {}
@@ -169,11 +135,11 @@ Cursor.prototype.unlock = function() {
 }
 
 Cursor.prototype.update = function() {
-    if(this.isRightMouseDown) {
-        this.events.emit(Cursor.RIGHT_MOUSE_HELD, this.rightDragHappened, this.rightMouseDownTime);
-    }
+    for(let i = 0; i < this.buttons.length; i++) {
+        const button = this.buttons[i];
 
-    if(this.isLeftMouseDown) {
-        this.events.emit(Cursor.LEFT_MOUSE_HELD, this.leftDragHappened, this.leftMouseDownTime);
+        if(button.state !== MouseButton.STATE.UP) {
+            this.events.emit(Cursor.EVENT.BUTTON_HOLD, i);
+        }
     }
 }

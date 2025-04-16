@@ -1,27 +1,32 @@
-import { Applyable } from "../../graphics/applyable.js";
+import { EventEmitter } from "../../events/eventEmitter.js";
 import { Outline } from "../../graphics/applyable/outline.js";
+import { Logger } from "../../logger.js";
 import { isCircleCicleIntersect, isRectangleRectangleIntersect } from "../../math/math.js";
 import { UIElement } from "../uiElement.js";
 
-export const Button = function(id) {
-    UIElement.call(this, id, "Button");
+export const Button = function(DEBUG_NAME) {
+    UIElement.call(this, DEBUG_NAME);
 
-    this.shape = Button.SHAPE_RECTANGLE;
-    this.highlight = new Applyable();
+    this.defers = [];
+    this.shape = Button.SHAPE.RECTANGLE;
+    this.highlight = new Outline();
     this.outline = new Outline();
-    this.highlight.setColor(200, 200, 200, 0.25);
-    this.outline.setColor(255, 255, 255, 1);
+
+    this.highlight.color.setColor(200, 200, 200, 0.25);
+    this.outline.color.setColor(255, 255, 255, 1);
     this.outline.enable();
 
-    this.events.listen(Button.EVENT_DEFER_DRAW);
-    this.events.listen(Button.EVENT_CLICKED);
+    this.events = new EventEmitter();
+    this.events.listen(UIElement.EVENT.FIRST_COLLISION);
+    this.events.listen(UIElement.EVENT.LAST_COLLISION);
+    this.events.listen(UIElement.EVENT.REPEATED_COLLISION);
+    this.events.listen(UIElement.EVENT.CLICKED);
 }
 
-Button.EVENT_DEFER_DRAW = "EVENT_DEFER_DRAW";
-Button.EVENT_CLICKED = "EVENT_CLICKED";
-
-Button.SHAPE_RECTANGLE = 0;
-Button.SHAPE_CIRCLE = 1;
+Button.SHAPE = {
+    RECTANGLE: 0,
+    CIRCLE: 1
+};
 
 Button.prototype = Object.create(UIElement.prototype);
 Button.prototype.constructor = Button;
@@ -32,50 +37,45 @@ Button.prototype.setShape = function(shape) {
     }
 }
 
-Button.prototype.loadFromConfig = function(config) {
-    const { id, opacity, position, shape } = config;
-    const { x, y } = position;
-
-    this.DEBUG_NAME = id;
-    this.setPosition(x, y);
-    this.setOpacity(opacity);
-
-    this.events.subscribe(UIElement.EVENT_FIRST_COLLISION, this.DEBUG_NAME, () => this.highlight.enable());
-    this.events.subscribe(UIElement.EVENT_FINAL_COLLISION, this.DEBUG_NAME, () => this.highlight.disable());
-
-    switch(shape) {
-        case Button.SHAPE_RECTANGLE: {
-            const { width, height } = config;
-            this.setShape(Button.SHAPE_RECTANGLE);
-            this.bounds.set(0, 0, width, height);
+Button.prototype.onCollision = function(type, mouseX, mouseY, mouseRange) {
+    switch(type) {
+        case UIElement.COLLISION_TYPE.FIRST: {
+            this.highlight.enable();
+            this.events.emit(UIElement.EVENT.FIRST_COLLISION);
             break;
         }
-        case Button.SHAPE_CIRCLE: {
-            const { radius } = config;
-            this.setShape(Button.SHAPE_CIRCLE);
-            this.bounds.set(0, 0, radius, radius);
+        case UIElement.COLLISION_TYPE.LAST: {
+            this.highlight.disable();
+            this.events.emit(UIElement.EVENT.LAST_COLLISION);
+            break;
+        }
+        case UIElement.COLLISION_TYPE.REPEATED: {
+            this.events.emit(UIElement.EVENT.REPEATED_COLLISION);
             break;
         }
         default: {
-            console.warn(`Shape ${shape} does not exist!`);
+            Logger.log(Logger.CODE.ENGINE_WARN, "CollisionType does not exist!", "Button.prototype.onCollision", { "type": type });
+            break;
         }
     }
+}   
+
+Button.prototype.onClick = function() {
+    this.events.emit(UIElement.EVENT.CLICKED);
 }
 
-Button.prototype.onDebug = function(context, viewportX, viewportY, localX, localY) {
-    const { w, h } = this.bounds;
-
+Button.prototype.onDebug = function(context, localX, localY) {
     context.globalAlpha = 0.2;
     context.fillStyle = "#ff00ff";
 
     switch(this.shape) {
-        case Button.SHAPE_RECTANGLE: {
-            context.fillRect(localX, localY, w, h);
+        case Button.SHAPE.RECTANGLE: {
+            context.fillRect(localX, localY, this.width, this.height);
             break;
         }
-        case Button.SHAPE_CIRCLE: {
+        case Button.SHAPE.CIRCLE: {
             context.beginPath();
-            context.arc(localX, localY, w, 0, 2 * Math.PI);
+            context.arc(localX, localY, this.width, 0, 2 * Math.PI);
             context.fill();
             break;
         }
@@ -83,49 +83,84 @@ Button.prototype.onDebug = function(context, viewportX, viewportY, localX, local
 }
 
 Button.prototype.isColliding = function(mouseX, mouseY, mouseRange) {
-    const { x, y } = this.position;
-    const { w, h } = this.bounds;
-
     switch(this.shape) {
-        case Button.SHAPE_RECTANGLE: return isRectangleRectangleIntersect(x, y, w, h, mouseX, mouseY, mouseRange, mouseRange);
-        case Button.SHAPE_CIRCLE: return isCircleCicleIntersect(x, y, w, mouseX, mouseY, mouseRange);
-        default: return false;
+        case Button.SHAPE.RECTANGLE: {
+            const isColliding = isRectangleRectangleIntersect(this.positionX, this.positionY, this.width, this.height, mouseX, mouseY, mouseRange, mouseRange);
+
+            return isColliding;
+        }
+        case Button.SHAPE.CIRCLE: {
+            const isColliding = isCircleCicleIntersect(this.positionX, this.positionY, this.width, mouseX, mouseY, mouseRange);
+
+            return isColliding;
+        }
+        default: {
+            return false;
+        }
     }
 }
 
-Button.prototype.onDraw = function(context, viewportX, viewportY, localX, localY) {
-    this.events.emit(Button.EVENT_DEFER_DRAW, this, context, localX, localY);
-    
-    const { w, h } = this.bounds;
+Button.prototype.clearDefers = function() {
+    this.defers.length = 0;
+}
+
+Button.prototype.addDefer = function(onDraw) {
+    this.defers.push(onDraw);
+}
+
+Button.prototype.drawDefers = function(context, localX, localY) {
+    for(let i = 0; i < this.defers.length; i++) {
+        const onDraw = this.defers[i];
+
+        onDraw(context, localX, localY);
+    }
+}
+
+Button.prototype.drawStyle = function(context, localX, localY) {
     const isHighlightActive = this.highlight.isActive();
     const isOutlineActive = this.outline.isActive();
 
     switch(this.shape) {
-        case Button.SHAPE_RECTANGLE: {
+        case Button.SHAPE.RECTANGLE: {
             if(isHighlightActive) {
-                this.highlight.apply(context);
-                context.fillRect(localX, localY, w, h);
+                const fillStyle = this.highlight.color.getRGBAString();
+
+                context.fillStyle = fillStyle;
+                context.fillRect(localX, localY, this.width, this.height);
             }
         
             if(isOutlineActive) {
                 this.outline.apply(context);
-                context.strokeRect(localX, localY, w, h);
+
+                context.strokeRect(localX, localY, this.width, this.height);
             }
+
             break;
         }
-        case Button.SHAPE_CIRCLE: {
+        case Button.SHAPE.CIRCLE: {
             if(isHighlightActive) {
-                this.highlight.apply(context);
-                context.arc(localX, localY, w, 0, 2 * Math.PI);
+                const fillStyle = this.highlight.color.getRGBAString();
+
+                context.fillStyle = fillStyle;
+                context.beginPath();
+                context.arc(localX, localY, this.width, 0, 2 * Math.PI);
                 context.fill();
             }
         
             if(isOutlineActive) {
                 this.outline.apply(context);
-                context.arc(localX, localY, w, 0, 2 * Math.PI);
+
+                context.beginPath();
+                context.arc(localX, localY, this.width, 0, 2 * Math.PI);
                 context.stroke();
             }
+
             break;
         }
     }
+}
+
+Button.prototype.onDraw = function(context, localX, localY) {
+    this.drawDefers(context, localX, localY);
+    this.drawStyle(context, localX, localY);
 }

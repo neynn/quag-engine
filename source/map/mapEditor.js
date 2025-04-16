@@ -1,161 +1,199 @@
-import { Logger } from "../logger.js";
-import { clampValue, loopValue } from "../math/math.js";
+import { ArmyMap } from "../../game/init/armyMap.js";
+import { loopValue } from "../math/math.js";
+import { Scroller } from "../scroller.js";
 
 export const MapEditor = function() {
     this.brush = null;
-    this.config = {};
-    this.brushSets = [];
-    this.allSetElements = [];
-    this.brushSetIndex = 0;
-    this.brushSizeIndex = 0;
-    this.brushModeIndex = 0;
+    this.allAutotilers = [];
+    this.currentSetTiles = [];
+
+    this.brushSets = new Scroller();
+    this.brushSet = null;
+
+    this.brushSizes = new Scroller();
+    this.brushSize = 0;
+
+    this.brushModes = new Scroller([MapEditor.MODE.DRAW, MapEditor.MODE.AUTOTILE]);
+    this.brushMode = MapEditor.MODE.DRAW;
+
     this.pageIndex = 0;
     this.activityStack = [];
+    this.isAutotiling = false;
+    this.hiddenSets = new Set();
+    this.slots = [];
 }
 
-MapEditor.MODE_DRAW = "DRAW";
-MapEditor.MODE_ERASE = "ERASE";
-MapEditor.MODE_FILL = "FILL";
+MapEditor.MODE = {
+    DRAW: 0,
+    AUTOTILE: 1
+};
 
-MapEditor.prototype.scrollBrushSize = function(delta = 0) {    
-    this.brushSizeIndex = clampValue(this.brushSizeIndex + delta, this.config.brushSizes.length - 1, 0);
+MapEditor.MODE_NAME = {
+    [MapEditor.MODE.DRAW]: "DRAW",
+    [MapEditor.MODE.AUTOTILE]: "AUTOTILE"
+};
+
+MapEditor.prototype.toggleAutotiling = function() {
+    this.isAutotiling = !this.isAutotiling;
+
+    return this.isAutotiling;
 }
 
-MapEditor.prototype.getBrushSize = function() {
-    return this.config.brushSizes[this.brushSizeIndex];
+MapEditor.prototype.scrollBrushSize = function(delta = 0) {
+    const brushSize = this.brushSizes.scroll(delta);
+
+    if(brushSize !== null) {
+        this.brushSize = brushSize;
+    }
 }
 
 MapEditor.prototype.scrollBrushMode = function(delta = 0) {
-    this.brushModeIndex = loopValue(this.brushModeIndex + delta, this.config.brushModes.length - 1, 0);
-    this.reloadAll();
-}
+    const brushMode = this.brushModes.loop(delta);
 
-MapEditor.prototype.getBrushMode = function() {
-    return this.config.brushModes[this.brushModeIndex];
+    if(brushMode !== null) {
+        this.brushMode = brushMode;
+    }
+
+    this.reloadAll();
 }
 
 MapEditor.prototype.scrollBrushSet = function(delta) {
-    this.brushSetIndex = loopValue(this.brushSetIndex + delta, this.brushSets.length - 1, 0);
+    const brushSet = this.brushSets.loop(delta);
+
+    if(brushSet !== null) {
+        this.brushSet = brushSet;
+    }
+
     this.reloadAll();
 }    
 
-MapEditor.prototype.getBrushSet = function() {
-    return this.brushSets[this.brushSetIndex];
-}
+MapEditor.prototype.getModeElements = function() {
+    switch(this.brushMode) {
+        case MapEditor.MODE.DRAW: return this.currentSetTiles;
+        case MapEditor.MODE.AUTOTILE: return this.allAutotilers;
+        default: return [];
+    }
+}   
 
 MapEditor.prototype.scrollPage = function(delta = 0) {
-    const maxSlots = this.config.interface.slots.length;
-    const maxPagesNeeded = Math.ceil(this.allSetElements.length / maxSlots);
+    const modeElements = this.getModeElements();
+    const maxPagesNeeded = Math.ceil(modeElements.length / this.slots.length);
 
     if(maxPagesNeeded <= 0) {
         this.pageIndex = 0;
-        return;
+    } else {
+        this.pageIndex = loopValue(this.pageIndex + delta, maxPagesNeeded - 1, 0);
     }
-
-    this.pageIndex = loopValue(this.pageIndex + delta, maxPagesNeeded - 1, 0);
 }
 
-MapEditor.prototype.getPage = function() {
-    const maxSlots = this.config.interface.slots.length;
-    const brushSet = this.getBrushSet();
+MapEditor.prototype.routePage = function() {
+    switch(this.brushMode) {
+        case MapEditor.MODE.DRAW: return this.getDrawPage();
+        case MapEditor.MODE.AUTOTILE: return this.getAutotilePage();
+        default: return this.getAutotilePage();
+    }
+}
+
+MapEditor.prototype.createBrush = function(id, name) {
+    return {
+        "name": name,
+        "id": id
+    }
+}
+
+MapEditor.prototype.getAutotilePage = function() {
+    const maxSlots = this.slots.length;
     const pageElements = []; 
 
-    if(!brushSet) {
-        for(let i = 0; i < maxSlots; i++) {
-            pageElements.push({
-                "tileName": "",
-                "tileID": 0
-            });
+    for(let i = 0; i < maxSlots; i++) {
+        pageElements.push(this.createBrush(0, "NONE"));
+    }
+
+    return pageElements;
+}
+
+MapEditor.prototype.getDrawPage = function() {
+    const pageElements = []; 
+    const modeElements = this.getModeElements();
+
+    if(!this.brushSet) {
+        for(let i = 0; i < this.slots.length; i++) {
+            pageElements.push(this.createBrush(0, "NONE"));
         }
 
         return pageElements;
     }
 
-    const { values } = brushSet;
+    const { values } = this.brushSet;
 
-    for(let i = 0; i < maxSlots; i++) {
-        const index = maxSlots * this.pageIndex + i;
+    for(let i = 0; i < this.slots.length; i++) {
+        const index = this.slots.length * this.pageIndex + i;
 
-        if(index > this.allSetElements.length - 1) {
-            pageElements.push({
-                "tileName": "",
-                "tileID": 0
-            });
+        if(index > modeElements.length - 1) {
+            pageElements.push(this.createBrush(0, "NONE"));
 
             continue;
         }
 
-        const tileName = this.allSetElements[index];
+        const tileName = modeElements[index];
         const tileID = values[tileName];
         
-        pageElements.push({
-            "tileName": tileName,
-            "tileID": tileID
-        });
+        pageElements.push(this.createBrush(tileID, tileName));
     }
 
     return pageElements;
 }
 
 MapEditor.prototype.reloadAll = function() {
-    this.allSetElements = [];
     this.pageIndex = 0;
     this.brush = null;
 
-    const brushMode = this.getBrushMode();
+    switch(this.brushMode) {
+        case MapEditor.MODE.DRAW: {
+            this.currentSetTiles = [];
 
-    if(brushMode === MapEditor.MODE_DRAW) {
-        const brushSet = this.getBrushSet();
+            if(!this.brushSet) {
+                return;
+            }
 
-        if(!brushSet) {
-            return;
+            const { values } = this.brushSet;
+
+            for(const key in values) {
+                this.currentSetTiles.push(key);
+            }
+
+            break;
         }
-
-        const { values } = brushSet;
-
-        for(const key in values) {
-            this.allSetElements.push(key);
+        case MapEditor.MODE.AUTOTILE: {
+            break;
         }
     }
 }
 
-MapEditor.prototype.loadConfig = function(config) {
-    if(config === undefined) {
-        Logger.log(false, "Config cannot be undefined!", "MapEditor.prototype.loadConfig", null);
-        return;
-    }
+MapEditor.prototype.loadBrushSets = function(invertedTileMeta) {
+    const sets = [];
 
-    this.config = config;
-}
-
-MapEditor.prototype.loadBrushSets = function(tileMeta) {
-    for(const setID in tileMeta.inversion) {
-        if(this.config.hiddenSets[setID]) {
+    for(const setID in invertedTileMeta) {
+        if(this.hiddenSets.has(setID)) {
             continue;
         }
 
-        const set = tileMeta.inversion[setID];
         const brushSet = {};
+        const set = invertedTileMeta[setID];
 
         for(const tileID in set) {
             brushSet[tileID] = set[tileID];
         }
 
-        this.brushSets.push({
+        sets.push({
             "id": setID,
             "values": brushSet
         });
     }
 
+    this.brushSets.setValues(sets);
+    this.scrollBrushSet(0);
     this.reloadAll();
-}
-
-MapEditor.prototype.getBrush = function() {
-    return this.brush;
-}
-
-MapEditor.prototype.setBrush = function(brush = null) {
-    this.brush = brush;
 }
 
 MapEditor.prototype.undo = function(gameContext) {
@@ -172,127 +210,95 @@ MapEditor.prototype.undo = function(gameContext) {
         return;
     }
 
-    for(const { layerID, tileX, tileY, oldID, newID } of actions) {
+    for(let i = 0; i < actions.length; i++) {
+        const action = actions[i];
+        const { layerID, tileX, tileY, oldID, newID } = action;
+
         gameMap.placeTile(oldID, layerID, tileX, tileY);
     }
 }
 
-MapEditor.prototype.swapFlag = function(gameContext, mapID, layerID) {
-    const { world } = gameContext;
-    const { mapManager } = world;
-    const cursorTile = gameContext.getMouseTile();
-    const gameMap = mapManager.getLoadedMap(mapID);
-
-    if(!gameMap) {
-        return false;
-    }
-
-    const actionsTaken = [];
-    const brushSize = this.getBrushSize();
-    const startX = cursorTile.x - brushSize;
-    const startY = cursorTile.y - brushSize;
-    const endX = cursorTile.x + brushSize;
-    const endY = cursorTile.y + brushSize;
-
-    for(let i = startY; i <= endY; i++) {
-        for(let j = startX; j <= endX; j++) {
-            const flag = gameMap.getTile(layerID, j, i);
-
-            if(flag === null) {
-                continue;
-            }
-
-            const nextFlag = flag === 0 ? 1 : 0;
-            
-            gameMap.placeTile(nextFlag, layerID, j, i);
-
-            actionsTaken.push({
-                "layerID": layerID,
-                "tileX": j,
-                "tileY": i,
-                "oldID": flag,
-                "newID": nextFlag
-            });
-        }
-    }
-
-    if(actionsTaken.length !== 0) {
-        this.activityStack.push({
-            "mapID": mapID,
-            "mode": MapEditor.MODE_DRAW,
-            "actions": actionsTaken
-        });
-    }
-
-    return true;
-}
-
 MapEditor.prototype.paint = function(gameContext, mapID, layerID) {
-    const { world } = gameContext;
+    const { world, tileManager } = gameContext;
     const { mapManager } = world;
+    const { meta } = tileManager;
     const cursorTile = gameContext.getMouseTile();
     const gameMap = mapManager.getLoadedMap(mapID);
-    const brush = this.getBrush();
 
-    if(!gameMap || !brush) {
+    if(!gameMap || !this.brush) {
         return;
     }
 
     const actionsTaken = [];
-    const { tileID } = brush;
-    const brushSize = this.getBrushSize();
-    const startX = cursorTile.x - brushSize;
-    const startY = cursorTile.y - brushSize;
-    const endX = cursorTile.x + brushSize;
-    const endY = cursorTile.y + brushSize;
+    const { id } = this.brush;
+    const startX = cursorTile.x - this.brushSize;
+    const startY = cursorTile.y - this.brushSize;
+    const endX = cursorTile.x + this.brushSize;
+    const endY = cursorTile.y + this.brushSize;
+    const tileMeta = meta.getMeta(id);
 
     for(let i = startY; i <= endY; i++) {
         for(let j = startX; j <= endX; j++) {
             const oldTileID = gameMap.getTile(layerID, j, i);
 
-            if(oldTileID === null || oldTileID === tileID) {
+            if(oldTileID === null || oldTileID === id) {
                 continue;
             }
 
-            gameMap.placeTile(tileID, layerID, j, i);
+            gameMap.placeTile(id, layerID, j, i);
 
-            actionsTaken.push({
-                "layerID": layerID,
-                "tileX": j,
-                "tileY": i,
-                "oldID": oldTileID,
-                "newID": tileID
-            });
+            if(tileMeta) {
+                const { defaultType } = tileMeta;
+
+                if(defaultType) {
+                    gameMap.placeTile(defaultType, ArmyMap.LAYER.TYPE, j, i);
+                }
+            }
+
+            if(this.isAutotiling) {
+                gameMap.repaint(gameContext, j, i, layerID);
+            } else {
+                actionsTaken.push({
+                    "layerID": layerID,
+                    "tileX": j,
+                    "tileY": i,
+                    "oldID": oldTileID,
+                    "newID": id
+                });
+            }
         }
     }
 
     if(actionsTaken.length !== 0) {
         this.activityStack.push({
             "mapID": mapID,
-            "mode": MapEditor.MODE_DRAW,
+            "mode": this.brushMode,
             "actions": actionsTaken
         });
     }
 }
 
-MapEditor.prototype.resizeMap = function(gameMap, width, height) {
-    const defaultSetup = this.config.defaultMapLayers;
-    const layers = gameMap.getLayers();
+MapEditor.prototype.resizeMap = function(worldMap, width, height, layers) {
+    for(const [layerID, layer] of worldMap.layers) {
+        const layerConfig = layers[layerID];
 
-    for(const layerID in layers) {
-        const layerSetup = defaultSetup[layerID];
-        const fill = layerSetup ? layerSetup.fill : 0;
+        if(layerConfig) {
+            const fill = layerConfig.fill;
 
-        gameMap.resizeLayer(layerID, width, height, fill);
+            worldMap.resizeLayer(layerID, width, height, fill);
+        } else {
+            worldMap.resizeLayer(layerID, width, height, 0);
+        }
     }
 
-    gameMap.setWidth(width);
-    gameMap.setHeight(height);
+    worldMap.setWidth(width);
+    worldMap.setHeight(height);
 }
 
-MapEditor.prototype.incrementTypeIndex = function(gameContext, mapID, layerID, typeID) {
+MapEditor.prototype.incrementTypeIndex = function(gameContext, mapID, layerID) {
     const { world } = gameContext;
     const { mapManager } = world;
+    const types = gameContext.tileTypes;
     const worldMap = mapManager.getLoadedMap(mapID);
 
     if(!worldMap) {
@@ -300,7 +306,6 @@ MapEditor.prototype.incrementTypeIndex = function(gameContext, mapID, layerID, t
     }
 
     const { x, y } = gameContext.getMouseTile();
-    const types = world.getConfig(typeID);
     const tileTypeIDs = [];
 
     for(const typeID of Object.keys(types)) {
@@ -315,11 +320,4 @@ MapEditor.prototype.incrementTypeIndex = function(gameContext, mapID, layerID, t
     const nextID = tileTypeIDs[nextIndex];
 
     worldMap.placeTile(nextID, layerID, x, y);
-}
-
-MapEditor.prototype.getDefaultMapData = function() {
-    return {
-        "layers": this.config.defaultMapLayers,
-        "meta": this.config.defaultMapMeta
-    }
 }

@@ -1,12 +1,90 @@
+import { Logger } from "../logger.js";
 import { clampValue } from "../math/math.js";
+import { Layer } from "./layer.js";
+import { Tracker } from "./tracker.js";
 
 export const WorldMap = function(id) {
     this.id = id;
     this.width = 0;
     this.height = 0;
-    this.meta = {};
-    this.layers = {};
-    this.entities = new Map();
+    this.flags = 0;
+    this.layers = new Map();
+    this.tracker = new Tracker();
+    this.background = [];
+    this.foreground = [];
+}
+
+WorldMap.prototype.saveMeta = function() {
+    const meta = [];
+
+    for(const [layerID, layer] of this.layers) {
+        const { autoGenerate, opacity } = layer;
+
+        meta.push(`"${layerID}": { "opacity": ${opacity}, "autoGenerate": ${autoGenerate} }`);
+    }
+
+    return meta;
+}
+
+WorldMap.prototype.saveLayers = function() {
+    const layers = [];
+
+    for(const [layerID, layer] of this.layers) {
+        const { autoGenerate } = layer;
+
+        if(!autoGenerate) {
+            layers.push(`"${layerID}": [${layer.encode()}]`);
+        }
+    }
+
+    return layers;
+}
+
+WorldMap.prototype.updateArea = function(tileX, tileY, range, onUpdate) {
+    const startX = tileX - range;
+    const startY = tileY - range;
+    const endX = tileX + range;
+    const endY = tileY + range;
+
+    for(let i = startY; i <= endY; i++) {
+        const row = i * this.width;
+
+        for(let j = startX; j <= endX; j++) {
+            const index = row + j;
+
+            onUpdate(index, j, i);
+        }
+    }
+}
+
+WorldMap.prototype.setID = function(id) {
+    this.id = id;
+}
+
+WorldMap.prototype.loadGraphics = function(background, foreground) {
+    for(let i = 0; i < background.length; i++) {
+        const layerID = background[i];
+
+        if(this.layers.has(layerID)) {
+            this.background.push(background[i]);
+        }
+    }
+
+    for(let i = 0; i < foreground.length; i++) {
+        const layerID = foreground[i];
+
+        if(this.layers.has(layerID)) {
+            this.foreground.push(foreground[i]);
+        }
+    }
+}
+
+WorldMap.prototype.getBackgroundLayers = function() {
+    return this.background;
+}
+
+WorldMap.prototype.getForegroundLayers = function() {
+    return this.foreground;
 }
 
 WorldMap.prototype.setWidth = function(width) {
@@ -17,162 +95,88 @@ WorldMap.prototype.setHeight = function(height) {
     this.height = height;
 }
 
-WorldMap.prototype.setLayers = function(graphics) {
-    this.layers = graphics;
+WorldMap.prototype.createLayer = function(id, buffer) {
+    if(this.layers.has(id)) {
+        return null;
+    }
+
+    const layer = new Layer(buffer);
+
+    this.layers.set(id, layer);
+
+    return layer;
 }
 
 WorldMap.prototype.getLayer = function(layerID) {
-    return this.layers[layerID];
-}
+    const layer = this.layers.get(layerID);
 
-WorldMap.prototype.getLayers = function() {
-    return this.layers;
-}
-
-WorldMap.prototype.addPointer = function(entityID, tileX, tileY) {
-    const entityList = this.getEntityList(tileX, tileY);
-    
-    if(!entityList) {
-        const index = tileY * this.width + tileX;
-
-        this.entities.set(index, [entityID]);
-        return;
+    if(!layer) {
+        return null;
     }
 
-    entityList.push(entityID);
+    return layer;
 }
 
-WorldMap.prototype.removePointer = function(entityID, tileX, tileY) {
-    const entityList = this.getEntityList(tileX, tileY);
-
-    if(!entityList) {
-        return;
-    }
-
-    for(let i = 0; i < entityList.length; i++) {
-        const entry = entityList[i];
-
-        if(entry === entityID) {
-            entityList.splice(i, 1);
-            break;
-        }
-    }
-
-    if(entityList.length === 0) {
-        const index = tileY * this.width + tileX;
-
-        this.entities.delete(index);
-    }
-}
-
-WorldMap.prototype.getEntityList = function(tileX, tileY) {
+WorldMap.prototype.getListID = function(tileX, tileY) {
     if(this.isTileOutOfBounds(tileX, tileY)) {
-        return null;
+        return -1;
     }
 
-    const index = tileY * this.width + tileX;
-    const entityList = this.entities.get(index);
-
-    if(!entityList) {
-        return null;
-    }
-
-    return entityList;
+    return tileY * this.width + tileX;
 }
 
 WorldMap.prototype.getEntities = function(tileX, tileY) {
-    const entityList = this.getEntityList(tileX, tileY);
-
-    if(!entityList) {
-        return [];
-    }
+    const listID = this.getListID(tileX, tileY);
+    const entityList = this.tracker.getList(listID);
 
     return entityList;
 }
 
 WorldMap.prototype.getTopEntity = function(tileX, tileY) {
-    const entityList = this.getEntityList(tileX, tileY);
+    const listID = this.getListID(tileX, tileY);
+    const topEntity = this.tracker.getTopElement(listID);
 
-    if(!entityList || entityList.length === 0) {
-        return null;
-    }
-
-    return entityList[entityList.length - 1];
+    return topEntity;
 }
 
 WorldMap.prototype.getBottomEntity = function(tileX, tileY) {
-    const entityList = this.getEntityList(tileX, tileY);
+    const listID = this.getListID(tileX, tileY);
+    const bottomEntity = this.tracker.getBottomElement(listID);
 
-    if(!entityList || entityList.length === 0) {
-        return null;
-    }
-
-    return entityList[0];
+    return bottomEntity;
 }
 
 WorldMap.prototype.isTileOccupied = function(tileX, tileY) {
-    const index = tileY * this.width + tileX;
-    const entityList = this.entities.get(index);
+    const listID = this.getListID(tileX, tileY);
+    const isActive = this.tracker.isListActive(listID);
 
-    if(!entityList) {
-        return false;
-    }
-
-    return entityList.length > 0;
+    return isActive;
 }
 
 WorldMap.prototype.setLayerOpacity = function(layerID, opacity) {
-    if(this.layers[layerID] === undefined || opacity === undefined) {
+    const layer = this.layers.get(layerID);
+
+    if(!layer || opacity === undefined) {
         return;
     }
 
     const clampedOpacity = clampValue(opacity, 1, 0);
-    const layerConfig = this.meta.layerConfig[layerID];
 
-    layerConfig.opacity = clampedOpacity;
+    layer.setOpacity(clampedOpacity);
 } 
 
-WorldMap.prototype.resize = function(width, height) {
-    for(const layerID in this.layers) {
-        this.resizeLayer(layerID, width, height, 0);
-    }
+WorldMap.prototype.resizeLayer = function(layerID, width, height, fill) {
+    const layer = this.layers.get(layerID);
 
-    this.width = width;
-    this.height = height;
-}
-
-WorldMap.prototype.resizeLayer = function(layerID, width, height, fill = 0) {
-    const oldLayer = this.layers[layerID];
-
-    if(!oldLayer) {
+    if(!layer) {
         return;
     }
 
-    const layerSize = width * height;
-    const ArrayType = oldLayer.constructor;
-    const newLayer = new ArrayType(layerSize);
-    
-    for(let i = 0; i < layerSize; i++) {
-        newLayer[i] = fill;
-    }
-
-    for(let i = 0; i < this.height && i < height; i++) {
-        const newRow = i * width;
-        const oldRow = i * this.width;
-
-        for(let j = 0; j < this.width && j < width; j++) {
-            const newIndex = newRow + j;
-            const oldIndex = oldRow + j;
-
-            newLayer[newIndex] = oldLayer[oldIndex];
-        }
-    }
-
-    this.layers[layerID] = newLayer;
+    layer.resize(this.width, this.height, width, height, fill);
 }
 
 WorldMap.prototype.clearTile = function(layerID, tileX, tileY) {
-    const layer = this.layers[layerID];
+    const layer = this.layers.get(layerID);
 
     if(!layer) {
         console.warn(`Layer ${layerID} does not exist! Returning...`);
@@ -183,33 +187,33 @@ WorldMap.prototype.clearTile = function(layerID, tileX, tileY) {
         console.warn(`Tile ${tileY},${tileX} does not exist! Returning...`);
         return;
     }
-    
-    const index = tileY * this.width + tileX;
 
-    layer[index] = 0;
+    const index = tileY * this.width + tileX;
+    
+    layer.setItem(0, index);
 }
 
 WorldMap.prototype.placeTile = function(data, layerID, tileX, tileY) {
-    const layer = this.layers[layerID];
+    const layer = this.layers.get(layerID);
 
     if(!layer) {
         console.warn(`Layer ${layerID} does not exist! Returning...`);
         return;
     }
 
-    if(this.isTileOutOfBounds(tileX, tileY)) {
-        console.warn(`Tile ${tileY},${tileX} does not exist! Returning...`);
-        return;
-    }
-    
     if(typeof data !== "number") {
         console.warn(`Data ${data} is not a number! It is ${typeof data}! Returning...`);
         return;
     }
 
+    if(this.isTileOutOfBounds(tileX, tileY)) {
+        console.warn(`Tile ${tileY},${tileX} does not exist! Returning...`);
+        return;
+    }
+
     const index = tileY * this.width + tileX;
 
-    layer[index] = data;
+    layer.setItem(data, index);
 }
 
 WorldMap.prototype.isTileOutOfBounds = function(tileX, tileY) {
@@ -217,51 +221,70 @@ WorldMap.prototype.isTileOutOfBounds = function(tileX, tileY) {
 }
 
 WorldMap.prototype.getTile = function(layerID, tileX, tileY) {
-    const layer = this.layers[layerID];
-    const isOutOfBounds = this.isTileOutOfBounds(tileX, tileY);
+    const layer = this.layers.get(layerID);
 
-    if(!layer || isOutOfBounds) {
-        console.warn(`Layer ${layerID} does not exist or tile ${tileX} ${tileY} is out of bounds! Returning null...`);
+    if(!layer) {
+        Logger.log(Logger.CODE.ENGINE_WARN, "Layer does not exist or tile is out of bounds!", "WorldMap.prototype.getTile", { layerID, tileX, tileY });
+
+        return null;
+    }
+
+    if(this.isTileOutOfBounds(tileX, tileY)) {
+        Logger.log(Logger.CODE.ENGINE_WARN, "Layer does not exist or tile is out of bounds!", "WorldMap.prototype.getTile", { layerID, tileX, tileY });
+
         return null;
     }
 
     const index = tileY * this.width + tileX;
+    const item = layer.getItem(index);
 
-    return layer[index];
+    return item;
 }
 
-WorldMap.prototype.removeEntity = function(tileX, tileY, rangeX, rangeY, pointer) {
+WorldMap.prototype.getUniqueEntitiesInRange = function(startX, startY, endX, endY) {
+    const entities = [];
+    const addedEntities = new Set();
+
+    for(let i = startY; i < endY; i++) {
+        for(let j = startX; j < endX; j++) {
+            const entityID = this.getTopEntity(j, i);
+
+            if(!addedEntities.has(entityID)) {
+                entities.push(entityID);
+                addedEntities.add(entityID)
+            }
+        }
+    }
+
+    return entities;
+}
+
+WorldMap.prototype.removeEntity = function(tileX, tileY, rangeX, rangeY, entityID) {
     for(let i = 0; i < rangeY; i++) {
         const locationY = tileY + i;
 
         for(let j = 0; j < rangeX; j++) {
             const locationX = tileX + j;
+            const listID = this.getListID(locationX, locationY);
 
-            this.removePointer(pointer, locationX, locationY);
+            if(listID !== -1) {
+                this.tracker.removeElement(listID, entityID);
+            }
         }
     }
 }
 
-WorldMap.prototype.addEntity = function(tileX, tileY, rangeX, rangeY, pointer) {
+WorldMap.prototype.addEntity = function(tileX, tileY, rangeX, rangeY, entityID) {
     for(let i = 0; i < rangeY; i++) {
         const locationY = tileY + i;
 
         for(let j = 0; j < rangeX; j++) {
             const locationX = tileX + j;
+            const listID = this.getListID(locationX, locationY);
 
-            this.addPointer(pointer, locationX, locationY);
-        }
-    }
-}
-
-WorldMap.prototype.updateTiles = function(onUpdate) {
-    for(let i = 0; i < this.height; i++) {
-        const row = i * this.width;
-
-        for(let j = 0; j < this.width; j++) {
-            const index = row + j;
-
-            onUpdate(index, j, i);
+            if(listID !== -1) {
+                this.tracker.addElement(listID, entityID);
+            }
         }
     }
 }

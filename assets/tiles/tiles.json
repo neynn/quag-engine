@@ -1,11 +1,8 @@
 {
     "EXAMPLE_SET": {
-        "id": "EXAMPLE_SET",
-        "directory": "assets/tiles",
+        "directory": ["assets", "tiles"],
         "source": "SHEET_FILE",
-        "bounds": {"x":0,"y":0,"w":0,"h":0},
         "frameTime": 1,
-        "allowFlip": false,
         "frames": {
             "EXAMPLE_FRAME": {"x":0,"y":0,"w":0,"h":0,"offset":{"x":0,"y":0}}
         },

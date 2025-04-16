@@ -1,19 +1,14 @@
-import { IDGenerator } from "../idGenerator.js";
 import { Effect } from "./effect.js";
 
 export const EffectManager = function() {
-    this.idGenerator = new IDGenerator("@EFFECT");
     this.activeEffects = new Map();
 }
 
-EffectManager.prototype.update = function(gameContext) {
-    const { renderer, timer } = gameContext;
+EffectManager.prototype.update = function(renderContext, deltaTime) {
     const deleteable = [];
-    const context = renderer.getContext();
-    const deltaTime = timer.getDeltaTime();
 
     this.activeEffects.forEach(effect => {
-        effect.update(context, deltaTime);
+        effect.update(renderContext, deltaTime);
 
         const effectID = effect.getID();
         const isFinished = effect.isFinished();
@@ -33,9 +28,7 @@ EffectManager.prototype.addEffect = function(effect) {
         return;
     }
     
-    const effectID = this.idGenerator.getID();
-
-    effect.setID(effectID);
+    const effectID = effect.getID();
 
     this.activeEffects.set(effectID, effect);
 }

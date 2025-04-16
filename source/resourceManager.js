@@ -1,54 +1,90 @@
+import { PathHandler } from "./resources/pathHandler.js";
+
 export const ResourceManager = function() {
     this.fonts = new Map();
 }
 
-ResourceManager.prototype.getPath = function(directory, source) {
-    const path = `${directory}/${source}`;
-
-    return path;
-}
+ResourceManager.MODE = {
+    DEVELOPER: 0,
+    PRODUCTION: 1
+};
 
 ResourceManager.prototype.promiseJSON = function(path) {
     return fetch(path).then(response => response.json()).catch(error => null);
 }
 
-ResourceManager.prototype.loadCSSFont = function(meta) {
-    const { id, directory, source } = meta;
-    const path = this.getPath(directory, source);
-    const fontFace = new FontFace(id, `url(${path})`);
-
-    return fontFace.load().then(font => {
+ResourceManager.prototype.addFont = function(id, font) {
+    if(!this.fonts.has(id)) {
         this.fonts.set(id, font);
 
         document.fonts.add(font);
-    });
+    }
 }
 
-ResourceManager.prototype.loadMain = async function(directory, source) {
-    const promises = [];
-    const fileIDs = [];
-    const mainPath = this.getPath(directory, source);
-    const mainFile = await this.promiseJSON(mainPath);
+ResourceManager.prototype.loadCSSFont = function(id, directory, source) {
+    const path = PathHandler.getPath(directory, source);
+    const fontFace = new FontFace(id, `url(${path})`);
 
-    for(const fileID in mainFile) {
-        const fileMeta = mainFile[fileID];
-        const { id, directory, source } = fileMeta;
-        const path = this.getPath(directory, source);
-        const file = this.promiseJSON(path);
+    return fontFace.load().then(font => this.addFont(id, font));
+}
 
-        fileIDs.push(id);
-        promises.push(file);
-    }
+ResourceManager.prototype.loadFontList = async function(fontList) {
+	const promises = [];
 
+	for(const fontID in fontList) {
+		const fontMeta = fontList[fontID];
+        const { directory, source } = fontMeta;
+        const promise = this.loadCSSFont(fontID, directory, source);
+
+		promises.push(promise);
+	}
+
+	return Promise.allSettled(promises);
+}
+
+ResourceManager.prototype.loadJSONList = async function(fileList) {
     const files = {};
-    const results = await Promise.allSettled(promises);
+    const promises = [];
 
-    for(let i = 0; i < results.length; i++) {
-        const result = results[i];
-        const fileID = fileIDs[i];
+    for(const fileID in fileList) {
+        const fileMeta = fileList[fileID];
+        const { directory, source } = fileMeta;
+        const path = PathHandler.getPath(directory, source);
+        const promise = this.promiseJSON(path).then(file => files[fileID] = file);
 
-        files[fileID] = result.value;
+        promises.push(promise);
     }
+
+    await Promise.allSettled(promises);
 
     return files;
+}
+
+ResourceManager.prototype.loadResources = async function(modeID, devPath, prodPath) {
+    switch(modeID) {
+        case ResourceManager.MODE.DEVELOPER: {
+            const files = await this.promiseJSON(devPath);
+            const resources = await this.loadJSONList(files);
+            const { fonts } = resources;
+
+            if(fonts) {
+                await this.loadFontList(fonts);
+            }
+
+            return resources;
+        }
+        case ResourceManager.MODE.PRODUCTION: {
+            const resources = await this.promiseJSON(prodPath);
+            const { fonts } = resources;
+
+            if(fonts) {
+                await this.loadFontList(fonts);
+            }
+
+            return resources;
+        }
+        default: {
+            return {};
+        }
+    }
 }
